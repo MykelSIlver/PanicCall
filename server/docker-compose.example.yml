@@ -1,0 +1,24 @@
+# Example service block — merge into your own compose file.
+services:
+  paniccall:
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    build:
+      context: ./server
+    image: paniccall-relay
+    container_name: paniccall
+    restart: unless-stopped
+    init: true
+    read_only: true                     # the relay writes nothing
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - /opt/paniccall:/config:ro       # put your pairs.json here, chmod 600
+    ports:
+      - "127.0.0.1:8765:8765"           # local only; nginx terminates TLS

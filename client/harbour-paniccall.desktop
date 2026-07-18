@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PanicCall
+Icon=harbour-paniccall
+Exec=harbour-paniccall
+
+[X-Sailjail]
+Permissions=Internet;Audio;Microphone
+OrganizationName=com.mykelsilver
+ApplicationName=PanicCall

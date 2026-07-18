@@ -1,0 +1,14 @@
+# Never commit real tokens
+pairs.json
+
+__pycache__/
+*.pyc
+server.log
+
+# Sailfish build artifacts
+client/RPMS/
+client/*.o
+client/moc_*.cpp
+client/Makefile
+client/harbour-paniccall
+client/.qmake.stash
