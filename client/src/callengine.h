@@ -51,7 +51,8 @@ public:
     QString lastError() const { return m_lastError; }
 
     // Connect (and stay connected, with backoff) to the relay.
-    Q_INVOKABLE void configure(const QString &url, const QString &token);
+    Q_INVOKABLE void configure(const QString &url, const QString &token,
+                               const QString &myName = QString());
     Q_INVOKABLE void disconnectFromServer();
 
     Q_INVOKABLE void startCall();   // caller: send "call" + stream immediately
@@ -91,6 +92,7 @@ private:
     QWebSocket m_ws;
     QString m_url;
     QString m_token;
+    QString m_myName;
     QString m_state;
     QString m_peerName;
     QString m_selfName;

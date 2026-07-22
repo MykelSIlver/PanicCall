@@ -77,7 +77,7 @@ docs/     Protocol spec, architecture, build & test guides
 ```bash
 cd server
 pip install "websockets>=12"
-python3 gen_pair.py family1 Alice Bob     # prints two tokens + a JSON snippet
+python3 gen_pair.py contact1 Alice Bob     # prints two tokens + a JSON snippet
 # paste the snippet into pairs.json (see pairs.example.json for the shape)
 python3 relay_server.py --pairs pairs.json
 python3 test_e2e.py                       # 13 checks, all green = good
@@ -94,8 +94,10 @@ sfdk build
 sfdk deploy --sdk
 ```
 
-Then open the app → pull down → Settings → enter your relay URL and your
-token. Press the button. Details, pitfalls and the test plan (including how
+Then open the app → pull down → Settings → enter your relay URL, your
+token and your name (names live on the devices; the server config only
+holds fallbacks). The UI follows the phone's language (English source,
+Dutch translation included; more welcome). Press the button. Details, pitfalls and the test plan (including how
 to test alone with an echo peer): [docs/CLIENT.md](docs/CLIENT.md) and
 [docs/TESTING.md](docs/TESTING.md).
 

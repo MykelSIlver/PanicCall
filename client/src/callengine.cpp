@@ -55,10 +55,12 @@ void CallEngine::setAutoAnswer(bool on)
     emit autoAnswerChanged();
 }
 
-void CallEngine::configure(const QString &url, const QString &token)
+void CallEngine::configure(const QString &url, const QString &token,
+                           const QString &myName)
 {
     m_url = url;
     m_token = token;
+    m_myName = myName.trimmed().left(32);
     m_wantConnected = true;
     m_backoffIdx = 0;
     m_ws.abort();               // drop any half-open attempt, then reconnect
@@ -87,6 +89,8 @@ void CallEngine::onConnected()
     hello.insert(QStringLiteral("type"), QStringLiteral("hello"));
     hello.insert(QStringLiteral("token"), m_token);
     hello.insert(QStringLiteral("proto"), kProtoVersion);
+    if (!m_myName.isEmpty())
+        hello.insert(QStringLiteral("name"), m_myName);
     sendJson(hello);
     // State flips to "idle" once the welcome arrives.
 }
@@ -146,6 +150,12 @@ void CallEngine::onTextMessage(const QString &msg)
         emit peerOnlineChanged();
         setError(QString());
         setState(QStringLiteral("idle"));
+    } else if (type == QLatin1String("peer_name")) {
+        const QString n = o.value(QStringLiteral("name")).toString();
+        if (!n.isEmpty() && n != m_peerName) {
+            m_peerName = n;
+            emit peerNameChanged();
+        }
     } else if (type == QLatin1String("peer_online")) {
         m_peerOnline = true;
         emit peerOnlineChanged();

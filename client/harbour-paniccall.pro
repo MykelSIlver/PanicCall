@@ -1,6 +1,6 @@
 TARGET = harbour-paniccall
 
-CONFIG += sailfishapp c++11
+CONFIG += sailfishapp sailfishapp_i18n c++11
 QT += websockets
 # NB: do not add 'link_pkgconfig' here — the sailfishapp feature adds it
 # itself. Adding it manually runs link_pkgconfig before sailfishapp and
@@ -18,3 +18,7 @@ DISTFILES += qml/harbour-paniccall.qml \
     harbour-paniccall.desktop
 
 SAILFISHAPP_ICONS = 86x86 108x108 128x128 172x172
+
+# English is the source language; add one line per extra language.
+TRANSLATIONS += translations/harbour-paniccall.ts \
+    translations/harbour-paniccall-nl.ts

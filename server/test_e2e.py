@@ -57,7 +57,7 @@ async def main():
     # 2. A connects first: peer offline
     ws_a = await websockets.connect(URI)
     w = await hello(ws_a, TOK_A)
-    check("A welcome", w.get("type") == "welcome" and w.get("peer") == "Papa")
+    check("A welcome", w.get("type") == "welcome" and w.get("peer") == "Bob")
     check("A sees peer offline", w.get("peer_online") is False)
 
     # 3. audio while peer offline must be dropped silently (no error, no echo)
@@ -66,7 +66,7 @@ async def main():
     # 4. B connects: B sees peer online, A gets peer_online push
     ws_b = await websockets.connect(URI)
     w = await hello(ws_b, TOK_B)
-    check("B welcome", w.get("type") == "welcome" and w.get("peer") == "Kind")
+    check("B welcome", w.get("type") == "welcome" and w.get("peer") == "Alice")
     check("B sees peer online", w.get("peer_online") is True)
     msg = await recv_json(ws_a)
     check("A pushed peer_online", msg.get("type") == "peer_online")
@@ -74,8 +74,8 @@ async def main():
     # 5. call signalling A -> B
     await ws_a.send(json.dumps({"type": "call"}))
     msg = await recv_json(ws_b)
-    check("B gets incoming_call from Kind",
-          msg.get("type") == "incoming_call" and msg.get("from") == "Kind")
+    check("B gets incoming_call from Alice",
+          msg.get("type") == "incoming_call" and msg.get("from") == "Alice")
 
     # 6. relay 200 audio frames A -> B, byte-exact and in order
     sent = []
@@ -95,12 +95,14 @@ async def main():
     f = audio_frame(7, 140, b"reply-audio")
     await ws_b.send(f)
     raw = await asyncio.wait_for(ws_a.recv(), 3.0)
+    while isinstance(raw, str):                    # skip control pushes
+        raw = await asyncio.wait_for(ws_a.recv(), 3.0)
     check("reverse direction relays", raw == f)
 
     # 8. hangup B -> A
     await ws_b.send(json.dumps({"type": "hangup"}))
     msg = await recv_json(ws_a)
-    check("A gets hangup", msg.get("type") == "hangup" and msg.get("from") == "Papa")
+    check("A gets hangup", msg.get("type") == "hangup" and msg.get("from") == "Bob")
 
     # 9. reconnect with same token replaces old connection (4003)
     ws_a2 = await websockets.connect(URI)
@@ -123,8 +125,33 @@ async def main():
         raw = await asyncio.wait_for(ws_b.recv(), 3.0)
     check("relay works after reconnect", raw == f)
 
-    await ws_a2.close()
+    # 10. display name: reconnect A with a chosen name in the hello
+    ws_a3 = await websockets.connect(URI)
+    await ws_a3.send(json.dumps(
+        {"type": "hello", "token": TOK_A, "proto": 1, "name": "Mickey"}))
+    w = await recv_json(ws_a3)
+    check("A welcome echoes chosen name", w.get("you") == "Mickey")
+    # old A2 connection gets kicked (4003); B must receive peer_name push
+    try:
+        while True:
+            await asyncio.wait_for(ws_a2.recv(), 3.0)
+    except websockets.ConnectionClosed:
+        pass
+    got_name = None
+    for _ in range(5):
+        m = await recv_json(ws_b)
+        if m.get("type") == "peer_name":
+            got_name = m.get("name")
+            break
+    check("B pushed peer_name Mickey", got_name == "Mickey")
+    # 11. B reconnects and sees the runtime name in its welcome
     await ws_b.close()
+    ws_b2 = await websockets.connect(URI)
+    w = await hello(ws_b2, TOK_B)
+    check("B welcome shows runtime name", w.get("peer") == "Mickey")
+
+    await ws_a3.close()
+    await ws_b2.close()
 
     print()
     if FAILURES:

@@ -16,8 +16,14 @@ The **first** message after connecting must be a text frame within
 5 seconds:
 
 ```json
-{"type": "hello", "token": "<64 hex chars>", "proto": 1}
+{"type": "hello", "token": "<64 hex chars>", "proto": 1, "name": "Alice"}
 ```
+
+`name` is **optional** (added in v1.1, backward compatible): the display
+name chosen on the device, max 32 printable characters. The server
+remembers it for the session lifetime and uses it towards the peer in
+`welcome`, `incoming_call`, `hangup` and `peer_name`. Without it, the
+fallback name from the server's `pairs.json` is used.
 
 Server reply on success:
 
@@ -42,6 +48,7 @@ over. Clients may therefore always reconnect blindly.
 | client → server | `{"type":"hangup"}`                            | End the call; forwarded to the peer |
 | server → client | `{"type":"hangup","from":"Dad"}`               | Peer hung up |
 | server → client | `{"type":"peer_online"}` / `{"type":"peer_offline"}` | Presence change of the peer |
+| server → client | `{"type":"peer_name","name":"Alice"}`          | Peer (re)connected with a display name; update the UI |
 | server → client | `{"type":"error","reason":"..."}`              | Non-fatal error (e.g. peer offline on `call`) |
 
 Clients **must ignore** unknown `type` values (forward compatible).
@@ -90,7 +97,9 @@ and the callee opens its playback pipeline directly on `incoming_call`.
 Tokens are 32 random bytes, hex-encoded (64 characters), generated with
 `gen_pair.py`. Each pair has exactly 2 tokens. The server knows them via
 `pairs.json`; the devices receive their token once during setup (QR code
-or typed in). No usernames, no passwords. Note: v1 has no
+or typed in). No usernames, no passwords. The names in `pairs.json` are
+only fallbacks: each device announces its own display name in the
+`hello` (see §1), so renaming happens on the phone, not on the server. Note: v1 has no
 application-level encryption — TLS via nginx is the only protection in
 transit, and the token is the only credential. Treat it like a key.
 

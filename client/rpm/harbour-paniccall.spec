@@ -16,6 +16,7 @@ BuildRequires:  pkgconfig(Qt5WebSockets)
 BuildRequires:  pkgconfig(gstreamer-1.0)
 BuildRequires:  pkgconfig(gstreamer-app-1.0)
 BuildRequires:  desktop-file-utils
+BuildRequires:  qt5-qttools-linguist
 
 %description
 Walkie-talkie style panic call between two paired SailfishOS devices,

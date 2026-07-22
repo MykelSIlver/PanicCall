@@ -16,6 +16,11 @@ Page {
         defaultValue: ""
     }
     ConfigurationValue {
+        id: cfgName
+        key: "/apps/harbour-paniccall/myName"
+        defaultValue: ""
+    }
+    ConfigurationValue {
         id: cfgAutoAnswer
         key: "/apps/harbour-paniccall/autoAnswer"
         defaultValue: true
@@ -24,7 +29,7 @@ Page {
     Component.onCompleted: {
         callEngine.autoAnswer = cfgAutoAnswer.value
         if (cfgToken.value !== "")
-            callEngine.configure(cfgUrl.value, cfgToken.value)
+            callEngine.configure(cfgUrl.value, cfgToken.value, cfgName.value)
     }
 
     SilicaFlickable {
@@ -122,9 +127,11 @@ Page {
             onAccepted: {
                 cfgUrl.value = urlField.text
                 cfgToken.value = tokenField.text.trim()
+                cfgName.value = nameField.text.trim()
                 cfgAutoAnswer.value = autoSwitch.checked
                 callEngine.autoAnswer = autoSwitch.checked
-                callEngine.configure(urlField.text, tokenField.text.trim())
+                callEngine.configure(urlField.text, tokenField.text.trim(),
+                                     nameField.text.trim())
             }
             Column {
                 width: parent.width
@@ -135,6 +142,14 @@ Page {
                     label: qsTr("Relay URL")
                     text: cfgUrl.value
                     inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                }
+                TextField {
+                    id: nameField
+                    width: parent.width
+                    label: qsTr("Your name")
+                    description: qsTr("Shown on your contact's screen")
+                    text: cfgName.value
+                    placeholderText: qsTr("Your name")
                 }
                 TextField {
                     id: tokenField

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="nl">
+<context>
+    <name>MainPage</name>
+    <message>
+        <source>Settings</source>
+        <translation>Instellingen</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Niet verbonden</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Verbinden…</translation>
+    </message>
+    <message>
+        <source>%1 is online</source>
+        <translation>%1 is online</translation>
+    </message>
+    <message>
+        <source>%1 is offline</source>
+        <translation>%1 is offline</translation>
+    </message>
+    <message>
+        <source>%1 is calling!</source>
+        <translation>%1 belt!</translation>
+    </message>
+    <message>
+        <source>In call with %1</source>
+        <translation>In gesprek met %1</translation>
+    </message>
+    <message>
+        <source>HANG UP</source>
+        <translation>OPHANGEN</translation>
+    </message>
+    <message>
+        <source>ANSWER</source>
+        <translation>OPNEMEN</translation>
+    </message>
+    <message>
+        <source>CALL %1</source>
+        <translation>BEL %1</translation>
+    </message>
+    <message>
+        <source>Relay URL</source>
+        <translation>Relay-URL</translation>
+    </message>
+    <message>
+        <source>Token (64 hex characters)</source>
+        <translation>Token (64 hex-tekens)</translation>
+    </message>
+    <message>
+        <source>Your name</source>
+        <translation>Je naam</translation>
+    </message>
+    <message>
+        <source>Shown on your contact's screen</source>
+        <translation>Zichtbaar op het scherm van je contact</translation>
+    </message>
+    <message>
+        <source>Auto-answer</source>
+        <translation>Automatisch opnemen</translation>
+    </message>
+    <message>
+        <source>Open audio immediately on an incoming call (baby monitor / emergency behaviour)</source>
+        <translation>Audio direct openen bij een inkomende oproep (babyfoon-/noodgedrag)</translation>
+    </message>
+</context>
+<context>
+    <name>CoverPage</name>
+    <message>
+        <source>In call with %1</source>
+        <translation>In gesprek met %1</translation>
+    </message>
+    <message>
+        <source>%1 is calling!</source>
+        <translation>%1 belt!</translation>
+    </message>
+    <message>
+        <source>%1 is online</source>
+        <translation>%1 is online</translation>
+    </message>
+    <message>
+        <source>%1 is offline</source>
+        <translation>%1 is offline</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Verbinden…</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Niet verbonden</translation>
+    </message>
+</context>
+<context>
+    <name>CallEngine</name>
+    <message>
+        <source>Server does not know this token — check the configuration</source>
+        <translation>Server kent dit token niet — controleer de instellingen</translation>
+    </message>
+    <message>
+        <source>Token was taken over by another device</source>
+        <translation>Token is door een ander toestel overgenomen</translation>
+    </message>
+    <message>
+        <source>Protocol version not supported — app update required</source>
+        <translation>Protocolversie niet ondersteund — app-update nodig</translation>
+    </message>
+    <message>
+        <source>%1 is not online</source>
+        <translation>%1 is niet online</translation>
+    </message>
+</context>
+</TS>

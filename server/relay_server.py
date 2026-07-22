@@ -42,8 +42,9 @@ log = logging.getLogger("paniccall")
 @dataclass
 class Member:
     token: str
-    name: str
+    name: str                                  # fallback from pairs.json
     pair_id: str
+    display: str = ""                          # runtime name set by the device
     peer: "Member" = None                      # set after config load
     conn: ServerConnection = None              # live connection or None
     dropped_audio: int = field(default=0)      # frames dropped (peer offline)
@@ -67,8 +68,10 @@ def load_pairs(path: Path) -> dict[str, Member]:
         entries = list(pair["members"].items())
         if len(entries) != 2:
             sys.exit(f"pair '{pid}' must have exactly 2 members")
-        a = Member(token=entries[0][0], name=entries[0][1], pair_id=pid)
-        b = Member(token=entries[1][0], name=entries[1][1], pair_id=pid)
+        a = Member(token=entries[0][0], name=entries[0][1], pair_id=pid,
+                   display=entries[0][1])
+        b = Member(token=entries[1][0], name=entries[1][1], pair_id=pid,
+                   display=entries[1][1])
         a.peer, b.peer = b, a
         for m in (a, b):
             if m.token in members:
@@ -99,7 +102,7 @@ class Relay:
             # a reconnect may already have taken over.
             if member.conn is conn:
                 member.conn = None
-                log.info("OFFLINE %s (%s)", member.name, member.pair_id)
+                log.info("OFFLINE %s (%s)", member.display, member.pair_id)
                 if member.peer.conn is not None:
                     await send_json(member.peer.conn, {"type": "peer_offline"})
 
@@ -124,6 +127,11 @@ class Relay:
             assert hello["type"] == "hello"
             token = str(hello["token"])
             proto = int(hello["proto"])
+            # optional display name chosen on the device (v1.1, backward
+            # compatible: absent field keeps the pairs.json fallback)
+            req_name = "".join(
+                ch for ch in str(hello.get("name", ""))
+                if ch.isprintable())[:32].strip()
         except (ValueError, KeyError, AssertionError, TypeError):
             log.warning("REJECT malformed hello from %s: %.80s", addr, raw)
             await conn.close(CLOSE_BAD_FRAME, "malformed hello")
@@ -148,18 +156,23 @@ class Relay:
             await old.close(CLOSE_REPLACED, "replaced by new connection")
 
         member.conn = conn
+        if req_name:
+            member.display = req_name
         log.info("AUTH OK %s (%s) from %s",
-                 member.name, member.pair_id, conn.remote_address)
+                 member.display, member.pair_id, conn.remote_address)
 
         peer_online = member.peer.conn is not None
         await send_json(conn, {
             "type": "welcome",
-            "you": member.name,
-            "peer": member.peer.name,
+            "you": member.display,
+            "peer": member.peer.display,
             "peer_online": peer_online,
         })
         if peer_online:
             await send_json(member.peer.conn, {"type": "peer_online"})
+            # keep the peer's UI current with our (possibly new) name
+            await send_json(member.peer.conn,
+                            {"type": "peer_name", "name": member.display})
         return member
 
     def _lookup(self, token: str) -> Member | None:
@@ -191,7 +204,7 @@ class Relay:
             member.dropped_audio += 1
             if member.dropped_audio % 250 == 1:  # ~every 5 s of speech
                 log.info("DROP audio from %s: peer offline (total %d)",
-                         member.name, member.dropped_audio)
+                         member.display, member.dropped_audio)
             return
         try:
             await peer_conn.send(frame)         # relay byte-for-byte
@@ -207,17 +220,17 @@ class Relay:
         peer_conn = member.peer.conn
 
         if mtype == "call":
-            log.info("CALL %s -> %s (%s)", member.name, member.peer.name,
+            log.info("CALL %s -> %s (%s)", member.display, member.peer.display,
                      "online" if peer_conn else "OFFLINE")
             if peer_conn is None:
                 await send_json(conn, {"type": "error", "reason": "peer_offline"})
             else:
                 await send_json(peer_conn,
-                                {"type": "incoming_call", "from": member.name})
+                                {"type": "incoming_call", "from": member.display})
         elif mtype == "hangup":
-            log.info("HANGUP %s", member.name)
+            log.info("HANGUP %s", member.display)
             if peer_conn is not None:
-                await send_json(peer_conn, {"type": "hangup", "from": member.name})
+                await send_json(peer_conn, {"type": "hangup", "from": member.display})
         # unknown types: ignore (forward compatible)
 
 
