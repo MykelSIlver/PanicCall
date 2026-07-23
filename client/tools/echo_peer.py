@@ -8,7 +8,10 @@ phone and you hear yourself ~1 s later: proves the entire chain
 speaker) in both directions.
 
 Usage:
-    python3 echo_peer.py wss://your-server.example/panic/ws <TOKEN> [delay_s]
+    python3 echo_peer.py wss://your-server.example/panic/ws <TOKEN> [delay_s] [--call]
+
+With --call the peer initiates the call itself (needed to test the
+background daemon: nobody touches the phone, the daemon must answer).
 """
 import asyncio
 import json
@@ -21,10 +24,16 @@ async def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     url, token = sys.argv[1], sys.argv[2]
-    delay = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
+    rest = sys.argv[3:]
+    initiate = "--call" in rest
+    rest = [a for a in rest if a != "--call"]
+    delay = float(rest[0]) if rest else 1.0
 
     async with websockets.connect(url) as ws:
         await ws.send(json.dumps({"type": "hello", "token": token, "proto": 1}))
+        if initiate:
+            await ws.send(json.dumps({"type": "call"}))
+            print(">>> call sent — the peer's daemon should auto-answer now")
 
         async def echo_later(frame: bytes):
             await asyncio.sleep(delay)

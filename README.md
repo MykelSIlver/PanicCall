@@ -105,8 +105,11 @@ to test alone with an echo peer): [docs/CLIENT.md](docs/CLIENT.md) and
 
 Roughly in order:
 
-1. **Background wake-up** — receive calls without the app open (daemon +
-   Sailfish KeepAlive). *The* feature for the emergency use case.
+1. **Background wake-up** — skeleton built (see
+   [docs/DAEMON.md](docs/DAEMON.md)): systemd daemon owns the engine, UI
+   auto-switches to a D-Bus remote control, KeepAlive wired for device
+   builds, metrics in the journal. Remaining: real-device measuring
+   campaign (suspend survival, battery cost), ringtone.
 2. **v2 contacts model** — one token per device, multiple peers per device,
    one button per contact on the caller side (proto 2).
 3. **Jitter buffer** — use the seq/timestamp already in every frame.

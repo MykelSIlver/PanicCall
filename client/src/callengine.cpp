@@ -214,6 +214,15 @@ void CallEngine::hangup()
         setState(QStringLiteral("idle"));
 }
 
+void CallEngine::sendKeepalivePing()
+{
+    if (m_ws.state() != QAbstractSocket::ConnectedState)
+        return;
+    QVariantMap ping;
+    ping.insert(QStringLiteral("type"), QStringLiteral("ping"));
+    sendJson(ping);
+}
+
 // ---------------------------------------------------------------- audio ---
 
 bool CallEngine::startAudio()

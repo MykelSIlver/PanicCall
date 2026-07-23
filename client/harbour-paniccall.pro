@@ -1,15 +1,17 @@
 TARGET = harbour-paniccall
 
 CONFIG += sailfishapp sailfishapp_i18n c++11
-QT += websockets
+QT += websockets dbus
 # NB: do not add 'link_pkgconfig' here — the sailfishapp feature adds it
 # itself. Adding it manually runs link_pkgconfig before sailfishapp and
 # -lsailfishapp drops off the link line (undefined references in main).
 PKGCONFIG += gstreamer-1.0 gstreamer-app-1.0
 
 SOURCES += src/harbour-paniccall.cpp \
-    src/callengine.cpp
-HEADERS += src/callengine.h
+    src/callengine.cpp \
+    src/daemonproxy.cpp
+HEADERS += src/callengine.h \
+    src/daemonproxy.h
 
 DISTFILES += qml/harbour-paniccall.qml \
     qml/pages/MainPage.qml \

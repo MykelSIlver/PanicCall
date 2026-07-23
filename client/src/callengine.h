@@ -59,6 +59,10 @@ public:
     Q_INVOKABLE void answer();      // callee: open audio (manual accept)
     Q_INVOKABLE void hangup();
 
+    // App-level keepalive: tiny JSON frame to keep NAT/radio paths warm.
+    // The server ignores unknown types by protocol rule.
+    Q_INVOKABLE void sendKeepalivePing();
+
 signals:
     void stateChanged();
     void peerOnlineChanged();

@@ -13,6 +13,8 @@ BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Qml)
 BuildRequires:  pkgconfig(Qt5Quick)
 BuildRequires:  pkgconfig(Qt5WebSockets)
+BuildRequires:  pkgconfig(Qt5DBus)
+BuildRequires:  pkgconfig(mlite5)
 BuildRequires:  pkgconfig(gstreamer-1.0)
 BuildRequires:  pkgconfig(gstreamer-app-1.0)
 BuildRequires:  desktop-file-utils
@@ -28,13 +30,22 @@ relayed through a self-hosted server (no WebRTC, no STUN/TURN).
 %build
 %qmake5
 %make_build
+pushd daemon
+%qmake5
+%make_build
+popd
 
 %install
 %qmake5_install
+pushd daemon
+%qmake5_install
+popd
 
 %files
 %defattr(-,root,root,-)
 %{_bindir}/%{name}
+%{_bindir}/%{name}-daemon
+/usr/lib/systemd/user/%{name}-daemon.service
 %{_datadir}/%{name}
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
