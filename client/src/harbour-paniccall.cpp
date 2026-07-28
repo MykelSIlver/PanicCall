@@ -23,10 +23,14 @@ int main(int argc, char *argv[])
     QDBusConnectionInterface *ifc = QDBusConnection::sessionBus().interface();
     const bool daemonUp = ifc && ifc->isServiceRegistered(
         QStringLiteral("com.mykelsilver.PanicCall"));
-    if (daemonUp)
+    if (daemonUp) {
+        qWarning() << "paniccall-app: mode=proxy (daemon on D-Bus)";
         engine = new DaemonProxy(app.data());
-    else
+    } else {
+        qWarning() << "paniccall-app: mode=standalone (no daemon service"
+                      " visible on this bus)";
         engine = new CallEngine(app.data());
+    }
 
     view->rootContext()->setContextProperty("callEngine", engine);
     view->rootContext()->setContextProperty("daemonMode", daemonUp);

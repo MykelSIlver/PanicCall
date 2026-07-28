@@ -27,9 +27,13 @@ Page {
     }
 
     Component.onCompleted: {
-        callEngine.autoAnswer = cfgAutoAnswer.value
-        if (cfgToken.value !== "")
-            callEngine.configure(cfgUrl.value, cfgToken.value, cfgName.value)
+        // In daemon mode the daemon reads dconf itself and owns the
+        // connection; touching it from here would disturb a live call.
+        if (!daemonMode) {
+            callEngine.autoAnswer = cfgAutoAnswer.value
+            if (cfgToken.value !== "")
+                callEngine.configure(cfgUrl.value, cfgToken.value, cfgName.value)
+        }
     }
 
     SilicaFlickable {
@@ -129,9 +133,13 @@ Page {
                 cfgToken.value = tokenField.text.trim()
                 cfgName.value = nameField.text.trim()
                 cfgAutoAnswer.value = autoSwitch.checked
-                callEngine.autoAnswer = autoSwitch.checked
-                callEngine.configure(urlField.text, tokenField.text.trim(),
-                                     nameField.text.trim())
+                if (!daemonMode) {
+                    callEngine.autoAnswer = autoSwitch.checked
+                    callEngine.configure(urlField.text, tokenField.text.trim(),
+                                         nameField.text.trim())
+                }
+                // daemon mode: the dconf writes above are enough; the
+                // daemon follows them live via mlite
             }
             Column {
                 width: parent.width

@@ -63,6 +63,11 @@ public:
     // The server ignores unknown types by protocol rule.
     Q_INVOKABLE void sendKeepalivePing();
 
+    // Daemon mode: on close 4003 (token taken over) keep reconnecting
+    // instead of giving up. The daemon is the rightful owner of the
+    // connection; a stale standalone app instance must lose this fight.
+    void setPersistOnTakeover(bool on) { m_persistOnTakeover = on; }
+
 signals:
     void stateChanged();
     void peerOnlineChanged();
@@ -104,6 +109,7 @@ private:
     bool m_peerOnline;
     bool m_autoAnswer;
     bool m_wantConnected;
+    bool m_persistOnTakeover;
     int m_backoffIdx;
 
     GstElement *m_sendPipe;

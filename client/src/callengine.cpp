@@ -19,6 +19,7 @@ CallEngine::CallEngine(QObject *parent)
     , m_peerOnline(false)
     , m_autoAnswer(true)
     , m_wantConnected(false)
+    , m_persistOnTakeover(false)
     , m_backoffIdx(0)
     , m_sendPipe(nullptr)
     , m_recvPipe(nullptr)
@@ -58,9 +59,17 @@ void CallEngine::setAutoAnswer(bool on)
 void CallEngine::configure(const QString &url, const QString &token,
                            const QString &myName)
 {
+    const QString name = myName.trimmed().left(32);
+    // Idempotent: same parameters while (re)connected means there is
+    // nothing to do. Without this, a stray configure (e.g. the UI opening
+    // mid-call) would abort a live connection for no reason.
+    if (url == m_url && token == m_token && name == m_myName
+            && m_wantConnected
+            && m_ws.state() != QAbstractSocket::UnconnectedState)
+        return;
     m_url = url;
     m_token = token;
-    m_myName = myName.trimmed().left(32);
+    m_myName = name;
     m_wantConnected = true;
     m_backoffIdx = 0;
     m_ws.abort();               // drop any half-open attempt, then reconnect
@@ -104,7 +113,10 @@ void CallEngine::onDisconnected()
         m_wantConnected = false;
     } else if (code == 4003) {
         setError(tr("Token was taken over by another device"));
-        m_wantConnected = false;
+        if (!m_persistOnTakeover)
+            m_wantConnected = false;
+        // daemon mode: keep m_wantConnected and reconnect — we will kick
+        // the other party back until it gives up (it lacks this flag)
     } else if (code == 4004) {
         setError(tr("Protocol version not supported — app update required"));
         m_wantConnected = false;

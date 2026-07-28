@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
     app.setApplicationName(QStringLiteral("PanicCall"));
 
     CallEngine engine;
+    engine.setPersistOnTakeover(true);
     new EngineAdaptor(&engine, &engine);
 
     QDBusConnection bus = QDBusConnection::sessionBus();
