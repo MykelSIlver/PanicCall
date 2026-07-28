@@ -50,9 +50,11 @@ clear through the whole chain in testing — but:
   audio. Planned, not built. Do not use this for secrets.
 - **No jitter buffer yet.** Fine on decent connections; choppy networks will
   sound choppy.
-- **The app must be in the foreground to receive calls.** Background
-  wake-up (the most important feature for the emergency use case) is the top
-  of the roadmap, not in the code.
+- **Background wake-up works, but is only proven on the emulator so far.**
+  A systemd daemon owns the connection and auto-answers with the app
+  closed (46 ms call setup in testing). Real-device behaviour — surviving
+  suspend, battery cost of the wakeups — is untested until hardware
+  arrives. See [docs/DAEMON.md](docs/DAEMON.md).
 - **Strict 1-on-1 pairs only.** One token talks to exactly one other token.
   A contacts model (one parent, multiple kids) is designed but not built.
 - **The protocol may change without mercy** between versions. It is
