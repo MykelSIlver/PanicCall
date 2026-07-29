@@ -12,3 +12,10 @@ client/moc_*.cpp
 client/Makefile
 client/harbour-paniccall
 client/.qmake.stash
+
+# Android build artifacts
+client-android/.gradle/
+client-android/.idea/
+client-android/local.properties
+client-android/app/build/
+client-android/build/

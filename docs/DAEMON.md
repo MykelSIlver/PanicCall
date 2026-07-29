@@ -19,7 +19,9 @@ This is solved by moving engine ownership into a background daemon.
   mlite and follows changes live.
 - The service name equals the app's Sailjail identity
   (OrganizationName + ApplicationName), so the sandboxed app is allowed
-  to talk to the unsandboxed daemon.
+  to talk to the unsandboxed daemon. **Confirmed working**: an
+  invoker-launched, sandboxed app detects the daemon and switches to
+  proxy mode.
 
 **Rule to remember:** when the daemon is enabled, the app must not run
 in standalone mode (two connections with one token fight via close

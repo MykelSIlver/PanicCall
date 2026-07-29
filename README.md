@@ -50,11 +50,11 @@ clear through the whole chain in testing — but:
   audio. Planned, not built. Do not use this for secrets.
 - **No jitter buffer yet.** Fine on decent connections; choppy networks will
   sound choppy.
-- **Background wake-up works, but is only proven on the emulator so far.**
-  A systemd daemon owns the connection and auto-answers with the app
-  closed (46 ms call setup in testing). Real-device behaviour — surviving
-  suspend, battery cost of the wakeups — is untested until hardware
-  arrives. See [docs/DAEMON.md](docs/DAEMON.md).
+- **Background wake-up works, but is only proven on the emulator so
+  far.** A systemd daemon owns the connection and auto-answers with the
+  app closed (46 ms call setup in testing). Real-device behaviour —
+  surviving suspend, battery cost of the wakeups — is untested until
+  hardware arrives. See [docs/DAEMON.md](docs/DAEMON.md).
 - **Strict 1-on-1 pairs only.** One token talks to exactly one other token.
   A contacts model (one parent, multiple kids) is designed but not built.
 - **The protocol may change without mercy** between versions. It is
@@ -62,14 +62,19 @@ clear through the whole chain in testing — but:
 - Tested on the SailfishOS 5.0 emulator and, so far, exactly zero real
   emergencies.
 
+- The **Android client** is a fresh skeleton (see
+  [docs/ANDROID.md](docs/ANDROID.md)) — same protocol, same relay,
+  untested on hardware at the time of writing.
+
 If any of this excites rather than worries you: welcome.
 
 ## Repository layout
 
 ```
-server/   Python relay (asyncio + websockets), Dockerfile, pairing tool, e2e tests
-client/   Native SailfishOS app (C++/QML, GStreamer, QWebSocket)
-docs/     Protocol spec, architecture, build & test guides
+server/          Python relay (asyncio + websockets), Dockerfile, pairing tool, e2e tests
+client/          Native SailfishOS app (C++/QML, GStreamer, QWebSocket)
+client-android/  Android app (Kotlin/Compose, OkHttp, Concentus Opus)
+docs/            Protocol spec, architecture, build & test guides
 ```
 
 ## Quick start
