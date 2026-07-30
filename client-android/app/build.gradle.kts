@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,7 +12,8 @@ android {
 
     defaultConfig {
         applicationId = "com.mykelsilver.paniccall"
-        minSdk = 33            // Samsung S22 Ultra on Android 13
+        minSdk = 26            // practical floor: NotificationChannel requires 26.
+                                // Covers Jo's Android 12 (API 31) with margin.
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
@@ -20,7 +23,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 dependencies {
