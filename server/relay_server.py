@@ -243,6 +243,13 @@ async def main() -> None:
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
+    # The websockets library logs a full traceback for every rejected
+    # handshake — including the plain curl/HTTP probe our own smoke-check
+    # (paniccall-smoke.sh) sends every 5 minutes on purpose to verify the
+    # relay is alive (expected: HTTP 426). That is not a relay problem, so
+    # keep it out of the log; our own AUTH/CALL/REJECT lines are on the
+    # "paniccall" logger and are unaffected by this.
+    logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
 
     members = load_pairs(args.pairs)
     n_pairs = len({m.pair_id for m in members.values()})
