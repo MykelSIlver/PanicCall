@@ -62,8 +62,13 @@ class CallService : LifecycleService() {
         super.onCreate()
         audioManager = getSystemService(AudioManager::class.java)
         createChannels()
-        startForeground(NOTIF_ONGOING, ongoingNotification("PanicCall standby"),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        val notif = ongoingNotification("PanicCall standby")
+        if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(NOTIF_ONGOING, notif,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } else {
+            startForeground(NOTIF_ONGOING, notif)   // no FGS types before API 29
+        }
 
         applySettings()
 
