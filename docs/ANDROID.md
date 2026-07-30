@@ -79,6 +79,22 @@ escape hatch. For the baby-monitor scenario (device charging, app
 visible) none of this applies. Measuring exactly where each of the three
 test devices draws this line is the point of the device matrix.
 
+## Speaker routing
+
+Android routes `VOICE_COMMUNICATION` audio to the earpiece by default —
+same as a normal phone call, for privacy. That is the wrong default for
+a panic/baby-monitor call, where being heard is the point. `CallService`
+therefore enters `MODE_IN_COMMUNICATION` and switches to the loudspeaker
+the moment a call starts, with a "Speaker on / Earpiece" chip in the UI
+to switch back. Two code paths: `setCommunicationDevice` (API 31+,
+explicit device selection) and the deprecated `isSpeakerphoneOn`
+(needed for API 30 and below — e.g. an unpatched Android 13 device).
+Requires `MODIFY_AUDIO_SETTINGS`, already in the manifest.
+
+Known rough edge: some OEM audio HALs (Samsung has a history here) can
+be slow to apply `setCommunicationDevice`, or briefly click/pop on
+switch. Worth confirming on both the Pixel and the S22 specifically.
+
 Doze will also throttle the 2.5-minute keepalive when the phone sleeps
 deeply; the `METRIC wakeup`/`METRIC alive` lines exist to quantify that,
 same philosophy as the Sailfish measuring campaign.

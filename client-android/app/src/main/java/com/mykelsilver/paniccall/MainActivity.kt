@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.material3.ExperimentalMaterial3Api
 
 class MainActivity : ComponentActivity() {
 
@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
                 val peer by svc.engine.peerName.collectAsStateWithLifecycle()
                 val online by svc.engine.peerOnline.collectAsStateWithLifecycle()
                 val err by svc.engine.lastError.collectAsStateWithLifecycle()
+                val speakerOn by svc.speakerOn.collectAsStateWithLifecycle()
 
                 Text(when (state) {
                     "disconnected" -> "Not connected"
@@ -113,6 +114,15 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Text(label, color = Color.White,
                         fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (state == "in_call") {
+                    Spacer(Modifier.height(24.dp))
+                    FilterChip(
+                        selected = speakerOn,
+                        onClick = { svc.toggleSpeaker() },
+                        label = { Text(if (speakerOn) "Speaker on" else "Earpiece") }
+                    )
                 }
 
                 if (err.isNotEmpty()) {
