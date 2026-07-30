@@ -46,6 +46,7 @@ class CallService : LifecycleService() {
     // the earpiece by default (like a regular phone call, for privacy) —
     // wrong default for a panic/baby-monitor call, where being heard is
     // the point. We default to the loudspeaker and let the UI toggle it.
+    // Default is loudspeaker (see applySettings); user-configurable.
     val speakerOn = MutableStateFlow(true)
     private lateinit var audioManager: AudioManager
     private var previousAudioMode = AudioManager.MODE_NORMAL
@@ -99,6 +100,7 @@ class CallService : LifecycleService() {
     fun applySettings() {
         val p = getSharedPreferences("paniccall", MODE_PRIVATE)
         engine.autoAnswer.value = p.getBoolean("autoAnswer", true)
+        speakerOn.value = p.getBoolean("defaultSpeaker", true)
         val url = p.getString("url", "") ?: ""
         val token = p.getString("token", "") ?: ""
         val name = p.getString("name", "") ?: ""

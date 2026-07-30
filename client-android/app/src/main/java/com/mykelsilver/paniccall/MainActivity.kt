@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
         var token by remember { mutableStateOf(p.getString("token", "") ?: "") }
         var name by remember { mutableStateOf(p.getString("name", "") ?: "") }
         var auto by remember { mutableStateOf(p.getBoolean("autoAnswer", true)) }
+        var speaker by remember { mutableStateOf(p.getBoolean("defaultSpeaker", true)) }
 
         AlertDialog(
             onDismissRequest = onDone,
@@ -154,7 +155,8 @@ class MainActivity : ComponentActivity() {
                     p.edit().putString("url", url.trim())
                         .putString("token", token.trim())
                         .putString("name", name.trim())
-                        .putBoolean("autoAnswer", auto).apply()
+                        .putBoolean("autoAnswer", auto)
+                        .putBoolean("defaultSpeaker", speaker).apply()
                     onDone()
                 }) { Text("Save") }
             },
@@ -171,6 +173,11 @@ class MainActivity : ComponentActivity() {
                         Switch(auto, { auto = it })
                         Spacer(Modifier.width(8.dp))
                         Text("Auto-answer")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(speaker, { speaker = it })
+                        Spacer(Modifier.width(8.dp))
+                        Text("Default to loudspeaker")
                     }
                 }
             })
