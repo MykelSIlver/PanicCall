@@ -95,6 +95,27 @@ Known rough edge: some OEM audio HALs (Samsung has a history here) can
 be slow to apply `setCommunicationDevice`, or briefly click/pop on
 switch. Worth confirming on both the Pixel and the S22 specifically.
 
+## Ringtone
+
+`CallService.ringLoop()` plays the device's *own* default ringtone via
+`RingtoneManager` while `state == "ringing"` — not a bundled sound, so
+it automatically respects the user's chosen tone, volume, and Do Not
+Disturb / silent-mode policy, exactly like the Sailfish side (which
+instead synthesizes a SID-style arpeggio, since Sailfish has no
+per-app-inherits-the-OS-ringtone equivalent).
+
+`Ringtone` has no built-in loop, so `ringLoop()` polls `isPlaying()`
+every 400 ms and calls `play()` again when it stops. Start/stop is
+tied to Kotlin coroutine cancellation rather than manual bookkeeping:
+`ringLoop()` is only called from inside
+`engine.state.collectLatest { ... }` guarded on `s == "ringing"`, and
+`collectLatest` cancels the previous block the instant the state
+changes again — so answer, hangup, peer-hangup, and disconnect all stop
+the ringtone for free via the `finally { ringtone.stop() }`, with no
+call site able to forget. The `CH_CALL` notification channel has its
+own sound explicitly disabled (`setSound(null, null)`) to avoid playing
+the ringtone twice.
+
 Doze will also throttle the 2.5-minute keepalive when the phone sleeps
 deeply; the `METRIC wakeup`/`METRIC alive` lines exist to quantify that,
 same philosophy as the Sailfish measuring campaign.

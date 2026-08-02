@@ -7,8 +7,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -78,6 +81,11 @@ class CallService : LifecycleService() {
                 if (s == "in_call" || s == "ringing") postIncomingCallUi()
                 if (s == "in_call") enterCallAudioMode()
                 if (s == "idle" || s == "disconnected") exitCallAudioMode()
+                // collectLatest cancels this whole block the instant s changes
+                // again, so ringLoop()'s finally{} (below) fires automatically
+                // on answer/hangup/peer-hangup/disconnect -- one place, same
+                // "can't forget to stop it" guarantee as the Sailfish side.
+                if (s == "ringing") ringLoop()
             }
         }
         lifecycleScope.launch {
@@ -121,6 +129,49 @@ class CallService : LifecycleService() {
     }
 
     // ------------------------------------------------------------ audio ---
+
+    /**
+     * Plays the device's own ringtone (respects the user's chosen tone,
+     * volume, and Do Not Disturb / silent-mode policy automatically --
+     * unlike a bundled sound we'd have to reinvent all of that ourselves)
+     * for as long as this coroutine runs. [Ringtone] has no built-in loop,
+     * so this polls [Ringtone.isPlaying] and restarts it when it stops.
+     *
+     * Cancellation IS the stop mechanism: called only from inside
+     * `engine.state.collectLatest { ... }` guarded on `s == "ringing"`,
+     * so entering any other state cancels this coroutine and the finally
+     * block below runs -- mirrors how the Sailfish side centralizes
+     * ringtone start/stop in one place (setState) rather than at every
+     * answer/hangup/disconnect call site.
+     */
+    private suspend fun ringLoop() {
+        val uri = RingtoneManager.getActualDefaultRingtoneUri(
+            this, RingtoneManager.TYPE_RINGTONE)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        val ringtone: Ringtone? = try {
+            RingtoneManager.getRingtone(this, uri)
+        } catch (e: Exception) {
+            Log.w(TAG, "ringtone: could not load default ringtone: ${e.message}")
+            null
+        }
+        if (ringtone == null) {
+            Log.w(TAG, "ringtone: no default ringtone available on this device")
+            return
+        }
+        ringtone.audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        try {
+            while (true) {
+                if (!ringtone.isPlaying) ringtone.play()
+                delay(400)   // isPlaying-poll interval; short enough that a
+                             // dropped/short tone gets restarted promptly
+            }
+        } finally {
+            ringtone.stop()
+        }
+    }
 
     /** Enter voice-call audio mode and route to the current speakerOn choice. */
     private fun enterCallAudioMode() {
@@ -174,7 +225,9 @@ class CallService : LifecycleService() {
         nm.createNotificationChannel(NotificationChannel(
             CH_CALL, "Incoming panic calls",
             NotificationManager.IMPORTANCE_HIGH).apply {
-                setSound(null, null)        // engine audio is the "ringtone" for now
+                // Sound is handled by ringLoop() via RingtoneManager, not by
+                // this notification -- avoids playing the ringtone twice.
+                setSound(null, null)
         })
     }
 

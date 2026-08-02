@@ -62,9 +62,13 @@ clear through the whole chain in testing — but:
 - Tested on the SailfishOS 5.0 emulator and, so far, exactly zero real
   emergencies.
 
-- The **Android client** is a fresh skeleton (see
-  [docs/ANDROID.md](docs/ANDROID.md)) — same protocol, same relay,
-  untested on hardware at the time of writing.
+- The **Android client** (see [docs/ANDROID.md](docs/ANDROID.md)) speaks
+  the same protocol against the same relay, and has been tested working
+  end to end on real hardware: a Google Pixel 8 Pro, a Samsung Galaxy
+  S22 Ultra, and a colleague's Android 12 phone. Calls, auto-answer, and
+  the background service all work — the one thing to know is that the
+  lock screen shows it running in the background, same as any app with
+  an active foreground service.
 
 If any of this excites rather than worries you: welcome.
 
