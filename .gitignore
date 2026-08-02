@@ -1,6 +1,11 @@
 # Never commit real tokens
 pairs.json
 
+# Never commit signing keys (once release builds exist)
+*.jks
+*.keystore
+key.properties
+
 __pycache__/
 *.pyc
 server.log
@@ -19,3 +24,13 @@ client-android/.idea/
 client-android/local.properties
 client-android/app/build/
 client-android/build/
+client-android/**/build/
+client-android/.kotlin/
+client-android/**/.cxx/
+client-android/**/*.iml
+client-android/captures/
+
+# A locally-built APK someone grabbed by hand (e.g. to send to a
+# colleague) should never end up committed, wherever it's copied to.
+*.apk
+*.aab
