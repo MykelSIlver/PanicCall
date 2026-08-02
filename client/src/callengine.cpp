@@ -11,6 +11,22 @@ const int kProtoVersion = 1;
 const int kBackoffMs[] = { 1000, 2000, 5000 };   // then stays at 5000
 const quint8 kFrameAudio = 0x01;
 const int kHeaderLen = 7;
+
+// SID-style ringtone: an ascending C-major arpeggio (C5-E5-G5-C6), square
+// wave, staccato -- classic 8-bit "phone's ringing" feel. Played via a
+// single live audiotestsrc whose freq/volume we step through on a timer;
+// deliberately NOT built from a finite concat-of-segments pipeline looped
+// via seek: that was tried and gst_element_seek_simple() proved unreliable
+// on a multi-source concat (returns FALSE, pipeline hangs). Stepping
+// properties on one live source has no EOS/seek involved at all.
+struct RingStep { double freq; double volume; int ms; };
+const RingStep kRingMelody[] = {
+    { 523,  0.5,  85 }, { 523, 0.0,  25 },   // C5
+    { 659,  0.5,  85 }, { 659, 0.0,  25 },   // E5
+    { 784,  0.5,  85 }, { 784, 0.0,  25 },   // G5
+    { 1047, 0.5, 130 }, { 1047, 0.0, 170 },  // C6, then a rest before looping
+};
+const int kRingSteps = sizeof(kRingMelody) / sizeof(kRingMelody[0]);
 }
 
 CallEngine::CallEngine(QObject *parent)
@@ -26,6 +42,9 @@ CallEngine::CallEngine(QObject *parent)
     , m_appSrc(nullptr)
     , m_seq(0)
     , m_rxFrames(0)
+    , m_ringPipe(nullptr)
+    , m_ringSrc(nullptr)
+    , m_ringStep(0)
 {
     connect(&m_ws, &QWebSocket::connected, this, &CallEngine::onConnected);
     connect(&m_ws, &QWebSocket::disconnected, this, &CallEngine::onDisconnected);
@@ -39,12 +58,15 @@ CallEngine::CallEngine(QObject *parent)
     // Poll both pipeline buses so errors become visible instead of silent.
     m_busPoll.setInterval(200);
     connect(&m_busPoll, &QTimer::timeout, this, &CallEngine::pollBus);
+    m_ringTimer.setSingleShot(true);
+    connect(&m_ringTimer, &QTimer::timeout, this, &CallEngine::advanceRingStep);
 }
 
 CallEngine::~CallEngine()
 {
     m_wantConnected = false;
     stopAudio();
+    stopRingtone();
     m_ws.abort();
 }
 
@@ -365,6 +387,61 @@ void CallEngine::stopAudio()
     }
 }
 
+// ------------------------------------------------------------- ringtone ---
+// Synthesized SID-style arpeggio via ONE live audiotestsrc whose freq/volume
+// we step on a timer (see kRingMelody). Deliberately not a finite pipeline
+// looped by seeking: prototyping showed gst_element_seek_simple() failing
+// unreliably on a multi-segment concat pipeline (returns FALSE, then the
+// pipeline hangs) -- a live source with property steps has no EOS/seek in
+// the loop at all, so there is nothing to fail.
+void CallEngine::startRingtone()
+{
+    if (m_ringPipe)
+        return;                                 // already ringing
+    GError *err = nullptr;
+    m_ringPipe = gst_parse_launch(
+        "audiotestsrc name=ring is-live=true wave=square volume=0.0"
+        " ! audioconvert ! audioresample ! pulsesink", &err);
+    if (!m_ringPipe || err) {
+        setError(QStringLiteral("ringtone: %1")
+                 .arg(err ? QString::fromUtf8(err->message) : QStringLiteral("?")));
+        g_clear_error(&err);
+        m_ringPipe = nullptr;
+        return;
+    }
+    m_ringSrc = gst_bin_get_by_name(GST_BIN(m_ringPipe), "ring");
+    m_ringStep = 0;
+    gst_element_set_state(m_ringPipe, GST_STATE_PLAYING);
+    advanceRingStep();                           // apply step 0 immediately
+}
+
+void CallEngine::stopRingtone()
+{
+    m_ringTimer.stop();
+    if (m_ringSrc) {
+        gst_object_unref(m_ringSrc);
+        m_ringSrc = nullptr;
+    }
+    if (m_ringPipe) {
+        gst_element_set_state(m_ringPipe, GST_STATE_NULL);
+        gst_object_unref(m_ringPipe);
+        m_ringPipe = nullptr;
+    }
+}
+
+// Fires once per melody step: set this step's freq/volume, then arm the
+// timer for this step's duration before moving on. Wraps at the end of
+// kRingMelody, so the arpeggio repeats for as long as we stay "ringing".
+void CallEngine::advanceRingStep()
+{
+    if (!m_ringSrc)
+        return;
+    const RingStep &s = kRingMelody[m_ringStep];
+    g_object_set(m_ringSrc, "freq", s.freq, "volume", s.volume, nullptr);
+    m_ringStep = (m_ringStep + 1) % kRingSteps;
+    m_ringTimer.start(s.ms);
+}
+
 // Runs on a GStreamer streaming thread — build the frame, hop to Qt thread.
 GstFlowReturn CallEngine::onNewSample(GstAppSink *sink, gpointer user)
 {
@@ -424,8 +501,18 @@ void CallEngine::setState(const QString &s)
 {
     if (m_state == s)
         return;
+    const bool wasRinging = (m_state == QLatin1String("ringing"));
+    const bool nowRinging  = (s == QLatin1String("ringing"));
     m_state = s;
     emit stateChanged();
+    // Centralized here (rather than at each call site) so every path that
+    // leaves "ringing" -- answer, hangup, peer hangup, disconnect -- is
+    // covered automatically; a per-call-site approach risks silently
+    // forgetting one and leaving the ringtone playing forever.
+    if (nowRinging && !wasRinging)
+        startRingtone();
+    else if (wasRinging && !nowRinging)
+        stopRingtone();
 }
 
 void CallEngine::setError(const QString &e)

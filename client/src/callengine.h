@@ -95,6 +95,9 @@ private:
     void scheduleReconnect();
     bool startAudio();
     void stopAudio();
+    void startRingtone();     // synthesized SID-style ring, plays on "ringing"
+    void stopRingtone();
+    void advanceRingStep();   // timer-driven: steps freq/volume for the melody
     void sendJson(const QVariantMap &obj);
     static GstFlowReturn onNewSample(GstAppSink *sink, gpointer user);
 
@@ -119,6 +122,11 @@ private:
     QElapsedTimer m_clock;
     QTimer      m_busPoll;      // surfaces GStreamer bus errors/warnings
     int         m_rxFrames;     // received audio frames (diagnostics)
+
+    GstElement *m_ringPipe;     // synthesized ringtone (live audiotestsrc)
+    GstElement *m_ringSrc;      // borrowed ref into m_ringPipe, for freq/volume
+    QTimer      m_ringTimer;    // single-shot per step; re-armed with next duration
+    int         m_ringStep;     // index into the melody step table
 };
 
 #endif // CALLENGINE_H

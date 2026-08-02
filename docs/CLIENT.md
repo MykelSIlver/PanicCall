@@ -56,3 +56,27 @@ Config is stored via Nemo.Configuration under
   and on stderr.
 - Run from a terminal to see all of it live:
   `sfdk emulator exec <emu> bash -lc 'PANICCALL_TESTTONE=1 harbour-paniccall'`
+
+## Ringtone
+
+With auto-answer off, the "ringing" state now plays a synthesized
+SID-style arpeggio (C5-E5-G5-C6, square wave, staccato) instead of
+silence — one `audiotestsrc` whose `freq`/`volume` are stepped on a
+`QTimer` (see `kRingMelody` in `callengine.cpp`). No bundled audio
+asset, no copyright question: it's generated on the fly.
+
+Deliberately *not* built as a finite melody looped via
+`gst_element_seek_simple()` on a `concat` of segments — prototyping
+that approach found the seek unreliable on a multi-source concat (fails
+silently, pipeline hangs). A single live source with property steps has
+no EOS/seek involved, so there's nothing to fail.
+
+Start/stop is centralized in `setState()`: any transition into
+`"ringing"` starts it, any transition out (answer, hangup, peer hangup,
+disconnect) stops it — one place, so no call site can forget. Because
+`CallEngine` is shared between the daemon and the standalone app, the
+ringtone plays correctly in both without extra wiring.
+
+Test: Settings → Auto-answer off, call from the echo peer, confirm the
+arpeggio loops for as long as the call rings and stops cleanly on
+answer/hangup.

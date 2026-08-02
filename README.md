@@ -116,11 +116,13 @@ Roughly in order:
    [docs/DAEMON.md](docs/DAEMON.md)): systemd daemon owns the engine, UI
    auto-switches to a D-Bus remote control, KeepAlive wired for device
    builds, metrics in the journal. Remaining: real-device measuring
-   campaign (suspend survival, battery cost), ringtone.
+   campaign (suspend survival, battery cost).
 2. **v2 contacts model** — one token per device, multiple peers per device,
    one button per contact on the caller side (proto 2).
 3. **Jitter buffer** — use the seq/timestamp already in every frame.
-4. **Ringtone, speaker routing, reconnect indicator.**
+4. **Speaker routing (done on Android), reconnect indicator.**
+   Ringtone: done on Sailfish (synthesized SID-style arpeggio, see
+   [docs/CLIENT.md](docs/CLIENT.md)); Android still needs one.
 5. **Application-level encryption.**
 
 ## License
