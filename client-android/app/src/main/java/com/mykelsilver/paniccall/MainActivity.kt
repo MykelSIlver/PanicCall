@@ -100,16 +100,22 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(32.dp))
 
-                val (label, color, action) = when (state) {
-                    "in_call" -> Triple("HANG UP", Color(0xFF802020)) { svc.engine.hangup() }
-                    "ringing" -> Triple("ANSWER", Color(0xFF208020)) { svc.engine.answer() }
-                    "idle" -> Triple("CALL ${peer.ifBlank { "…" }}",
+                // Greyed out and inert while idle-but-peer-offline: no point
+                // letting the user tap into the "peer not online" error path
+                // when the UI already knows the call would fail.
+                val canCall = state == "idle" && online
+                val (label, color, action) = when {
+                    state == "in_call" -> Triple("HANG UP", Color(0xFF802020)) { svc.engine.hangup() }
+                    state == "ringing" -> Triple("ANSWER", Color(0xFF208020)) { svc.engine.answer() }
+                    state == "idle" && canCall -> Triple("CALL ${peer.ifBlank { "…" }}",
                         Color(0xFFC02020)) { svc.engine.startCall() }
+                    state == "idle" -> Triple("${peer.ifBlank { "…" }} is offline",
+                        Color(0xFF404040)) { }
                     else -> Triple("…", Color(0xFF404040)) { }
                 }
                 Box(
                     Modifier.size(240.dp).background(color, CircleShape)
-                        .clickable { action() },
+                        .clickable(enabled = state != "idle" || online) { action() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(label, color = Color.White,

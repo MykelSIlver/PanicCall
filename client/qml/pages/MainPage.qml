@@ -72,8 +72,13 @@ Page {
             }
 
             // The one big button. Red = call, green flash = ringing.
+            // Greyed out and inert while idle-but-peer-offline: no point
+            // letting the user tap into the "peer_offline" error path when
+            // the UI already knows the call would fail.
             Rectangle {
                 id: bigButton
+                readonly property bool canCall: callEngine.state === "idle"
+                                                && callEngine.peerOnline
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(page.width, page.height) * 0.6
                 height: width
@@ -83,17 +88,25 @@ Page {
                         return "#802020"
                     if (callEngine.state === "ringing")
                         return "#208020"
-                    return callEngine.state === "idle" ? "#c02020" : "#404040"
+                    if (callEngine.state === "idle")
+                        return canCall ? "#c02020" : "#404040"
+                    return "#404040"
                 }
                 opacity: mouseArea.pressed ? 0.7 : 1.0
 
                 Label {
                     anchors.centerIn: parent
+                    width: parent.width - 2 * Theme.paddingMedium
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
                     font.pixelSize: Theme.fontSizeExtraLarge
                     color: "white"
                     text: {
                         if (callEngine.state === "in_call") return qsTr("HANG UP")
                         if (callEngine.state === "ringing") return qsTr("ANSWER")
+                        if (callEngine.state === "idle" && !canCall)
+                            return qsTr("%1 is offline").arg(callEngine.peerName !== ""
+                                                             ? callEngine.peerName : "…")
                         return qsTr("CALL %1").arg(callEngine.peerName !== ""
                                                   ? callEngine.peerName : "…")
                     }
@@ -102,6 +115,10 @@ Page {
                 MouseArea {
                     id: mouseArea
                     anchors.fill: parent
+                    // Disabled precisely for the idle-but-offline case; all
+                    // other states (ringing/in_call, or idle-and-online)
+                    // stay tappable exactly as before.
+                    enabled: callEngine.state !== "idle" || callEngine.peerOnline
                     onClicked: {
                         if (callEngine.state === "in_call")
                             callEngine.hangup()
