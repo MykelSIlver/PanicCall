@@ -36,6 +36,7 @@ class CallEngine : public QObject
     Q_PROPERTY(QString peerName READ peerName NOTIFY peerNameChanged)
     Q_PROPERTY(QString selfName READ selfName NOTIFY selfNameChanged)
     Q_PROPERTY(bool autoAnswer READ autoAnswer WRITE setAutoAnswer NOTIFY autoAnswerChanged)
+    Q_PROPERTY(bool notifyPresence READ notifyPresence WRITE setNotifyPresence NOTIFY notifyPresenceChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
 public:
@@ -48,6 +49,8 @@ public:
     QString selfName() const { return m_selfName; }
     bool autoAnswer() const { return m_autoAnswer; }
     void setAutoAnswer(bool on);
+    bool notifyPresence() const { return m_notifyPresence; }
+    void setNotifyPresence(bool on);
     QString lastError() const { return m_lastError; }
 
     // Connect (and stay connected, with backoff) to the relay.
@@ -74,6 +77,7 @@ signals:
     void peerNameChanged();
     void selfNameChanged();
     void autoAnswerChanged();
+    void notifyPresenceChanged();
     void lastErrorChanged();
     void incomingCall(const QString &from);
     // Internal: crosses from the GStreamer streaming thread to the Qt
@@ -98,6 +102,8 @@ private:
     void startRingtone();     // synthesized SID-style ring, plays on "ringing"
     void stopRingtone();
     void advanceRingStep();   // timer-driven: steps freq/volume for the melody
+    void playPresenceBlip(bool online);   // short one-shot chirp, no loop
+    void advanceBlipStep();
     void sendJson(const QVariantMap &obj);
     static GstFlowReturn onNewSample(GstAppSink *sink, gpointer user);
 
@@ -127,6 +133,13 @@ private:
     GstElement *m_ringSrc;      // borrowed ref into m_ringPipe, for freq/volume
     QTimer      m_ringTimer;    // single-shot per step; re-armed with next duration
     int         m_ringStep;     // index into the melody step table
+    bool        m_notifyPresence;
+
+    GstElement *m_blipPipe;     // short one-shot presence chirp (own pipe, no
+    GstElement *m_blipSrc;      // loop -- plays the online/offline chirp once
+    QTimer      m_blipTimer;    // then tears itself down)
+    int         m_blipStep;
+    bool        m_blipIsOnline; // which of the two chirp tables is playing
 };
 
 #endif // CALLENGINE_H

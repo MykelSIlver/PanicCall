@@ -1,5 +1,7 @@
 package com.mykelsilver.paniccall
 
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -34,6 +36,10 @@ class CallEngine {
     val peerOnline = MutableStateFlow(false)
     val lastError = MutableStateFlow("")
     val autoAnswer = MutableStateFlow(true)
+
+    /** Off by default: short chirp when the peer comes online/offline. */
+    val notifyPresence = MutableStateFlow(false)
+    private var toneGen: ToneGenerator? = null
 
     /** Emits the caller's name on each incoming call (for notifications). */
     val incomingCall = MutableStateFlow<String?>(null)
@@ -163,8 +169,14 @@ class CallEngine {
                 setError("")
                 setState("idle")
             }
-            "peer_online" -> peerOnline.value = true
-            "peer_offline" -> peerOnline.value = false
+            "peer_online" -> {
+                peerOnline.value = true
+                if (notifyPresence.value) playPresenceBlip(online = true)
+            }
+            "peer_offline" -> {
+                peerOnline.value = false
+                if (notifyPresence.value) playPresenceBlip(online = false)
+            }
             "peer_name" -> o.optString("name").takeIf { it.isNotEmpty() }
                 ?.let { peerName.value = it }
             "incoming_call" -> {
@@ -218,5 +230,24 @@ class CallEngine {
     private fun setError(e: String) {
         lastError.value = e
         if (e.isNotEmpty()) Log.w(TAG, "error: $e")
+    }
+
+    /**
+     * Short built-in confirmation/rejection tone -- no custom frequency
+     * table needed, unlike the Sailfish side, since Android's ToneGenerator
+     * already ships an ACK/NACK pair for exactly this "something changed"
+     * signal. Needs no Context (unlike RingtoneManager, which is why the
+     * ringtone lives in CallService but this lives here in CallEngine).
+     */
+    private fun playPresenceBlip(online: Boolean) {
+        try {
+            val tg = toneGen ?: ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
+                .also { toneGen = it }
+            tg.startTone(
+                if (online) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_NACK,
+                150)
+        } catch (e: Exception) {
+            Log.w(TAG, "presence blip failed: ${e.message}")
+        }
     }
 }

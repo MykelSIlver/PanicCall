@@ -25,12 +25,18 @@ Page {
         key: "/apps/harbour-paniccall/autoAnswer"
         defaultValue: true
     }
+    ConfigurationValue {
+        id: cfgNotifyPresence
+        key: "/apps/harbour-paniccall/notifyPresence"
+        defaultValue: false
+    }
 
     Component.onCompleted: {
         // In daemon mode the daemon reads dconf itself and owns the
         // connection; touching it from here would disturb a live call.
         if (!daemonMode) {
             callEngine.autoAnswer = cfgAutoAnswer.value
+            callEngine.notifyPresence = cfgNotifyPresence.value
             if (cfgToken.value !== "")
                 callEngine.configure(cfgUrl.value, cfgToken.value, cfgName.value)
         }
@@ -150,8 +156,10 @@ Page {
                 cfgToken.value = tokenField.text.trim()
                 cfgName.value = nameField.text.trim()
                 cfgAutoAnswer.value = autoSwitch.checked
+                cfgNotifyPresence.value = presenceSwitch.checked
                 if (!daemonMode) {
                     callEngine.autoAnswer = autoSwitch.checked
+                    callEngine.notifyPresence = presenceSwitch.checked
                     callEngine.configure(urlField.text, tokenField.text.trim(),
                                          nameField.text.trim())
                 }
@@ -188,6 +196,12 @@ Page {
                     text: qsTr("Auto-answer")
                     description: qsTr("Open audio immediately on an incoming call (baby monitor / emergency behaviour)")
                     checked: cfgAutoAnswer.value
+                }
+                TextSwitch {
+                    id: presenceSwitch
+                    text: qsTr("Presence chirp")
+                    description: qsTr("Short sound when your contact comes online or goes offline")
+                    checked: cfgNotifyPresence.value
                 }
             }
         }

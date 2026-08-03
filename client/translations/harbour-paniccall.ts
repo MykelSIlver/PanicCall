@@ -4,6 +4,14 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Presence chirp</source>
+        <translation>Presence chirp</translation>
+    </message>
+    <message>
+        <source>Short sound when your contact comes online or goes offline</source>
+        <translation>Short sound when your contact comes online or goes offline</translation>
+    </message>
+    <message>
         <source>Settings</source>
         <translation>Settings</translation>
     </message>

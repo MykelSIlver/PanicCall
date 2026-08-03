@@ -27,6 +27,14 @@ const RingStep kRingMelody[] = {
     { 1047, 0.5, 130 }, { 1047, 0.0, 170 },  // C6, then a rest before looping
 };
 const int kRingSteps = sizeof(kRingMelody) / sizeof(kRingMelody[0]);
+
+// Short one-shot presence chirps -- clearly distinct from the 4-note
+// ringtone arpeggio, so they can never be confused with an incoming call.
+// Same {freq, volume, ms} shape as RingStep; kept as a separate BlipStep
+// name for clarity even though the fields match.
+struct BlipStep { double freq; double volume; int ms; };
+const BlipStep kOnlineBlip[]  = { {700, 0.4, 55}, {1000, 0.4, 70} };  // rising
+const BlipStep kOfflineBlip[] = { {1000, 0.4, 55}, {700, 0.4, 70} }; // falling
 }
 
 CallEngine::CallEngine(QObject *parent)
@@ -45,6 +53,11 @@ CallEngine::CallEngine(QObject *parent)
     , m_ringPipe(nullptr)
     , m_ringSrc(nullptr)
     , m_ringStep(0)
+    , m_notifyPresence(false)
+    , m_blipPipe(nullptr)
+    , m_blipSrc(nullptr)
+    , m_blipStep(0)
+    , m_blipIsOnline(false)
 {
     connect(&m_ws, &QWebSocket::connected, this, &CallEngine::onConnected);
     connect(&m_ws, &QWebSocket::disconnected, this, &CallEngine::onDisconnected);
@@ -60,6 +73,8 @@ CallEngine::CallEngine(QObject *parent)
     connect(&m_busPoll, &QTimer::timeout, this, &CallEngine::pollBus);
     m_ringTimer.setSingleShot(true);
     connect(&m_ringTimer, &QTimer::timeout, this, &CallEngine::advanceRingStep);
+    m_blipTimer.setSingleShot(true);
+    connect(&m_blipTimer, &QTimer::timeout, this, &CallEngine::advanceBlipStep);
 }
 
 CallEngine::~CallEngine()
@@ -67,6 +82,11 @@ CallEngine::~CallEngine()
     m_wantConnected = false;
     stopAudio();
     stopRingtone();
+    if (m_blipPipe) {
+        if (m_blipSrc) gst_object_unref(m_blipSrc);
+        gst_element_set_state(m_blipPipe, GST_STATE_NULL);
+        gst_object_unref(m_blipPipe);
+    }
     m_ws.abort();
 }
 
@@ -76,6 +96,14 @@ void CallEngine::setAutoAnswer(bool on)
         return;
     m_autoAnswer = on;
     emit autoAnswerChanged();
+}
+
+void CallEngine::setNotifyPresence(bool on)
+{
+    if (m_notifyPresence == on)
+        return;
+    m_notifyPresence = on;
+    emit notifyPresenceChanged();
 }
 
 void CallEngine::configure(const QString &url, const QString &token,
@@ -193,9 +221,13 @@ void CallEngine::onTextMessage(const QString &msg)
     } else if (type == QLatin1String("peer_online")) {
         m_peerOnline = true;
         emit peerOnlineChanged();
+        if (m_notifyPresence)
+            playPresenceBlip(true);
     } else if (type == QLatin1String("peer_offline")) {
         m_peerOnline = false;
         emit peerOnlineChanged();
+        if (m_notifyPresence)
+            playPresenceBlip(false);
     } else if (type == QLatin1String("incoming_call")) {
         const QString from = o.value(QStringLiteral("from")).toString();
         emit incomingCall(from);
@@ -440,6 +472,62 @@ void CallEngine::advanceRingStep()
     g_object_set(m_ringSrc, "freq", s.freq, "volume", s.volume, nullptr);
     m_ringStep = (m_ringStep + 1) % kRingSteps;
     m_ringTimer.start(s.ms);
+}
+
+// ---------------------------------------------------------- presence blip ---
+// Short, one-shot "peer appeared / peer left" chirp -- opt-in, off by
+// default. Reuses the exact live-audiotestsrc + timer-step mechanism
+// proven for the ringtone, but with NO loop: advanceBlipStep() just calls
+// stopBlip() after the last table entry instead of wrapping to 0. That is
+// the only structural difference, so there is nothing new here to distrust.
+void CallEngine::playPresenceBlip(bool online)
+{
+    if (m_blipPipe) {                            // a blip is already playing:
+        m_blipTimer.stop();                      // replace it rather than
+        if (m_blipSrc) gst_object_unref(m_blipSrc); // letting two overlap
+        gst_element_set_state(m_blipPipe, GST_STATE_NULL);
+        gst_object_unref(m_blipPipe);
+        m_blipPipe = nullptr;
+        m_blipSrc = nullptr;
+    }
+    GError *err = nullptr;
+    m_blipPipe = gst_parse_launch(
+        "audiotestsrc name=blip is-live=true wave=square volume=0.0"
+        " ! audioconvert ! audioresample ! pulsesink", &err);
+    if (!m_blipPipe || err) {
+        qWarning() << "paniccall: presence blip pipeline failed:"
+                   << (err ? err->message : "?");
+        g_clear_error(&err);
+        m_blipPipe = nullptr;
+        return;
+    }
+    m_blipSrc = gst_bin_get_by_name(GST_BIN(m_blipPipe), "blip");
+    m_blipIsOnline = online;
+    m_blipStep = 0;
+    gst_element_set_state(m_blipPipe, GST_STATE_PLAYING);
+    advanceBlipStep();
+}
+
+void CallEngine::advanceBlipStep()
+{
+    if (!m_blipSrc)
+        return;
+    const BlipStep *table = m_blipIsOnline ? kOnlineBlip : kOfflineBlip;
+    const int len = m_blipIsOnline
+        ? int(sizeof(kOnlineBlip) / sizeof(kOnlineBlip[0]))
+        : int(sizeof(kOfflineBlip) / sizeof(kOfflineBlip[0]));
+    if (m_blipStep >= len) {                     // done: tear down, no loop
+        gst_object_unref(m_blipSrc);
+        m_blipSrc = nullptr;
+        gst_element_set_state(m_blipPipe, GST_STATE_NULL);
+        gst_object_unref(m_blipPipe);
+        m_blipPipe = nullptr;
+        return;
+    }
+    const BlipStep &s = table[m_blipStep];
+    g_object_set(m_blipSrc, "freq", s.freq, "volume", s.volume, nullptr);
+    m_blipStep++;
+    m_blipTimer.start(s.ms);
 }
 
 // Runs on a GStreamer streaming thread — build the frame, hop to Qt thread.

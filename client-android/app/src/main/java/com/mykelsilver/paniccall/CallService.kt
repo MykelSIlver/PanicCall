@@ -114,6 +114,7 @@ class CallService : LifecycleService() {
         val p = getSharedPreferences("paniccall", MODE_PRIVATE)
         engine.autoAnswer.value = p.getBoolean("autoAnswer", true)
         speakerOn.value = p.getBoolean("defaultSpeaker", true)
+        engine.notifyPresence.value = p.getBoolean("notifyPresence", false)
         val url = p.getString("url", "") ?: ""
         val token = p.getString("token", "") ?: ""
         val name = p.getString("name", "") ?: ""

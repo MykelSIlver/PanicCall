@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
         var name by remember { mutableStateOf(p.getString("name", "") ?: "") }
         var auto by remember { mutableStateOf(p.getBoolean("autoAnswer", true)) }
         var speaker by remember { mutableStateOf(p.getBoolean("defaultSpeaker", true)) }
+        var presence by remember { mutableStateOf(p.getBoolean("notifyPresence", false)) }
 
         AlertDialog(
             onDismissRequest = onDone,
@@ -162,7 +163,8 @@ class MainActivity : ComponentActivity() {
                         .putString("token", token.trim())
                         .putString("name", name.trim())
                         .putBoolean("autoAnswer", auto)
-                        .putBoolean("defaultSpeaker", speaker).apply()
+                        .putBoolean("defaultSpeaker", speaker)
+                        .putBoolean("notifyPresence", presence).apply()
                     onDone()
                 }) { Text("Save") }
             },
@@ -184,6 +186,11 @@ class MainActivity : ComponentActivity() {
                         Switch(speaker, { speaker = it })
                         Spacer(Modifier.width(8.dp))
                         Text("Default to loudspeaker")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(presence, { presence = it })
+                        Spacer(Modifier.width(8.dp))
+                        Text("Presence chirp (contact online/offline)")
                     }
                 }
             })

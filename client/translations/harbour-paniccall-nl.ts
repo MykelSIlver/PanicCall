@@ -4,6 +4,14 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Presence chirp</source>
+        <translation>Aanwezigheidspiepje</translation>
+    </message>
+    <message>
+        <source>Short sound when your contact comes online or goes offline</source>
+        <translation>Kort geluidje als je contact online of offline gaat</translation>
+    </message>
+    <message>
         <source>Settings</source>
         <translation>Instellingen</translation>
     </message>
