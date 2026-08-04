@@ -166,42 +166,50 @@ Page {
                 // daemon mode: the dconf writes above are enough; the
                 // daemon follows them live via mlite
             }
-            Column {
-                width: parent.width
-                DialogHeader { title: qsTr("Settings") }
-                TextField {
-                    id: urlField
+            SilicaFlickable {
+                anchors.fill: parent
+                contentHeight: settingsColumn.height
+
+                VerticalScrollDecorator {}
+
+                Column {
+                    id: settingsColumn
                     width: parent.width
-                    label: qsTr("Relay URL")
-                    text: cfgUrl.value
-                    inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-                }
-                TextField {
-                    id: nameField
-                    width: parent.width
-                    label: qsTr("Your name")
-                    description: qsTr("Shown on your contact's screen")
-                    text: cfgName.value
-                    placeholderText: qsTr("Your name")
-                }
-                TextField {
-                    id: tokenField
-                    width: parent.width
-                    label: qsTr("Token (64 hex characters)")
-                    text: cfgToken.value
-                    inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-                }
-                TextSwitch {
-                    id: autoSwitch
-                    text: qsTr("Auto-answer")
-                    description: qsTr("Open audio immediately on an incoming call (baby monitor / emergency behaviour)")
-                    checked: cfgAutoAnswer.value
-                }
-                TextSwitch {
-                    id: presenceSwitch
-                    text: qsTr("Presence chirp")
-                    description: qsTr("Short sound when your contact comes online or goes offline")
-                    checked: cfgNotifyPresence.value
+                    DialogHeader { title: qsTr("Settings") }
+                    TextField {
+                        id: urlField
+                        width: parent.width
+                        label: qsTr("Relay URL")
+                        text: cfgUrl.value
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                    }
+                    TextField {
+                        id: nameField
+                        width: parent.width
+                        label: qsTr("Your name")
+                        description: qsTr("Shown on your contact's screen")
+                        text: cfgName.value
+                        placeholderText: qsTr("Your name")
+                    }
+                    TextField {
+                        id: tokenField
+                        width: parent.width
+                        label: qsTr("Token (64 hex characters)")
+                        text: cfgToken.value
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                    }
+                    TextSwitch {
+                        id: autoSwitch
+                        text: qsTr("Auto-answer")
+                        description: qsTr("Open audio immediately on an incoming call (baby monitor / emergency behaviour)")
+                        checked: cfgAutoAnswer.value
+                    }
+                    TextSwitch {
+                        id: presenceSwitch
+                        text: qsTr("Presence chirp")
+                        description: qsTr("Short sound when your contact comes online or goes offline")
+                        checked: cfgNotifyPresence.value
+                    }
                 }
             }
         }
