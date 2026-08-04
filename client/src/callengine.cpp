@@ -11,6 +11,10 @@ const int kProtoVersion = 1;
 const int kBackoffMs[] = { 1000, 2000, 5000 };   // then stays at 5000
 const quint8 kFrameAudio = 0x01;
 const int kHeaderLen = 7;
+// Frames to accumulate before playback starts (~80ms at 20ms/frame).
+// Proven-safe: only shown to delay the START of playback, giving the
+// decoder+pulsesink a head start; not a full mid-call jitter smoother.
+const int kJitterPrebufFrames = 4;
 
 // SID-style ringtone: an ascending C-major arpeggio (C5-E5-G5-C6), square
 // wave, staccato -- classic 8-bit "phone's ringing" feel. Played via a
@@ -325,9 +329,20 @@ bool CallEngine::startAudio()
     gst_app_sink_set_callbacks(GST_APP_SINK(sinkEl), &cb, this, nullptr);
     gst_object_unref(sinkEl);
 
-    m_recvPipe = gst_parse_launch(
-        "appsrc name=rcv ! queue ! opusdec plc=true ! audioconvert"
-        " ! audioresample ! queue ! pulsesink sync=false", &err);
+    // "jitterbuf" holds back the first frames until kJitterPrebufFrames
+    // have arrived, giving the decoder+pulsesink a running start with some
+    // slack already queued -- empirically verified to delay the start of
+    // playback as intended. This does NOT smooth ongoing mid-call jitter
+    // (that needs PTS-based clock sync, which testing showed is not a
+    // simple property tweak -- see docs/CLIENT.md). max-size-* are set
+    // generously so a genuine catch-up burst is never dropped.
+    const QString recvDesc = QStringLiteral(
+        "appsrc name=rcv ! queue name=jitterbuf min-threshold-buffers=%1"
+        " max-size-buffers=0 max-size-bytes=0 max-size-time=500000000"
+        " ! opusdec plc=true ! audioconvert"
+        " ! audioresample ! queue ! pulsesink sync=false")
+        .arg(kJitterPrebufFrames);
+    m_recvPipe = gst_parse_launch(recvDesc.toUtf8().constData(), &err);
     if (!m_recvPipe || err) {
         setError(QStringLiteral("recv pipeline: %1")
                  .arg(err ? QString::fromUtf8(err->message) : QStringLiteral("?")));

@@ -27,6 +27,10 @@ class AudioPipeline(private val sendFrame: (ByteArray) -> Unit) {
 
     private val sampleRate = 48000
     private val frameSamples = 960                  // 20 ms @ 48 kHz
+    // Frames to accumulate before playback starts (~80ms at 20ms/frame,
+    // matching the Sailfish side). Proven-safe: only shown to delay the
+    // START of playback; not a full mid-call jitter smoother.
+    private val jitterPrebufferFrames = 4
 
     @Volatile private var running = false
     private var captureThread: Thread? = null
@@ -91,6 +95,25 @@ class AudioPipeline(private val sendFrame: (ByteArray) -> Unit) {
                 AudioManager.AUDIO_SESSION_ID_GENERATE)
             val dec = OpusDecoder(sampleRate, 1)
             val pcm = ShortArray(frameSamples * 6)
+
+            // Proven-safe jitter mitigation: decode and write a few frames
+            // into AudioTrack's buffer BEFORE calling play(), so a brief
+            // arrival stall right after answering has slack to draw from
+            // (leans on AudioTrack's own buffer capacity, sized generously
+            // above). Bounded wait so a very short call can't hang here.
+            // This delays the START of playback; it does not smooth
+            // ongoing mid-call jitter (that needs PTS-based clock sync on
+            // a real sink -- testing on the Sailfish side showed that is
+            // not a simple property tweak, see docs/CLIENT.md).
+            var buffered = 0
+            val prebufferDeadline = SystemClock.elapsedRealtime() + 500
+            while (buffered < jitterPrebufferFrames && running &&
+                    SystemClock.elapsedRealtime() < prebufferDeadline) {
+                val opus = rxQueue.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    ?: continue
+                val n = dec.decode(opus, 0, opus.size, pcm, 0, pcm.size, false)
+                if (n > 0) { track.write(pcm, 0, n); buffered++ }
+            }
             track.play()
             try {
                 while (running) {

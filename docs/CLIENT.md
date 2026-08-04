@@ -80,3 +80,56 @@ ringtone plays correctly in both without extra wiring.
 Test: Settings → Auto-answer off, call from the echo peer, confirm the
 arpeggio loops for as long as the call rings and stops cleanly on
 answer/hangup.
+
+## Jitter mitigation: what's shipped, what isn't, and why
+
+**Shipped**: the recv pipeline's first `queue` (named `jitterbuf`) is
+configured with `min-threshold-buffers=4` (`kJitterPrebufFrames`,
+~80ms) and generous `max-size-*` so a catch-up burst is never dropped.
+This delays the *start* of playback until a few frames have arrived,
+giving the decoder+pulsesink a head start. Empirically verified (see
+below): moves first output from t=0ms to roughly t=(N×20)ms with
+synthetic jittery input, with no dropped frames. The Android side does
+the equivalent by writing `jitterPrebufferFrames` decoded frames into
+`AudioTrack` before calling `play()`, bounded to a 500ms wait so a very
+short call can't hang.
+
+**Not shipped, and why**: a real jitter buffer needs to keep smoothing
+*throughout* a call, not just at the start. Two approaches were
+prototyped against a synthetic feed (irregular 20ms/100ms gaps,
+simulating a network stall-then-catch-up) and neither worked:
+
+1. **Queue threshold alone.** `min-threshold-buffers` delays the first
+   output but does *not* re-engage mid-stream — once flowing, a `queue`
+   is a FIFO with flow control, not a pacing element. Output jitter
+   (stddev of inter-arrival gaps) was statistically identical with and
+   without the threshold once past the initial fill.
+2. **Position-based PTS + `sync=true`.** The textbook GStreamer fix:
+   stamp each buffer's PTS from its sequence position (not arrival
+   time) so a real sink can pace against it, holding early buffers and
+   playing late ones as soon as they arrive. Tested with an explicit
+   latency offset baked into the PTS (so there is always slack to hold
+   against). Still showed no measurable smoothing in testing.
+
+The second result is the more interesting one and is not fully
+understood. It may be specific to `fakesink` (used for the test since
+this environment has no PulseAudio daemon, only a headless sandbox) not
+implementing live-source latency negotiation as rigorously as a real
+sink -- `is-live=true` sources have real subtleties in how they
+negotiate pipeline latency, and a minimal `gst_parse_launch` pipeline
+may not be enough to get that negotiation right. **This needs testing
+against a real `pulsesink`** (the emulator has one; this sandbox
+doesn't) before either confirming the approach is a dead end or finding
+the missing piece (likely explicit latency query handling on the
+appsrc, or `pipeline.set_latency()`). Test harness for reproducing this
+is straightforward to rebuild: an `appsrc` fed on a `GTimeout` with
+deliberately irregular delays, a probe on the sink pad measuring
+inter-arrival timing, comparing configurations.
+
+If you pick this back up: start from the *symptom* (does clock-synced
+playback against a real pulsesink actually pace late buffers, or does
+it flush them immediately like the fakesink test showed?) rather than
+re-deriving the design from scratch -- the design reasoning above
+(TCP already guarantees order/no mid-connection loss, so this is purely
+an arrival-timing-smoothing problem, not a reorder/PLC problem) still
+holds regardless of how the pacing mechanism gets fixed.

@@ -48,7 +48,12 @@ clear through the whole chain in testing — but:
 
 - **No end-to-end encryption.** TLS protects the wire; the relay sees your
   audio. Planned, not built. Do not use this for secrets.
-- **No jitter buffer yet.** Fine on decent connections; choppy networks will
+- **Partial jitter mitigation only.** Playback waits for a few frames to
+  buffer before starting (absorbs a brief stall right after answering),
+  but there is no full mid-call jitter smoothing yet — that needs
+  clock-synced playback against the seq/timestamp already in every
+  frame, and prototyping found it isn't a simple property tweak (see
+  [docs/CLIENT.md](docs/CLIENT.md)). Choppy networks mid-call will still
   sound choppy.
 - **Background wake-up works, but is only proven on the emulator so
   far.** A systemd daemon owns the connection and auto-answers with the
@@ -123,7 +128,13 @@ Roughly in order:
    campaign (suspend survival, battery cost).
 2. **v2 contacts model** — one token per device, multiple peers per device,
    one button per contact on the caller side (proto 2).
-3. **Jitter buffer** — use the seq/timestamp already in every frame.
+3. **Full jitter buffer** — clock-synced playback against the seq/
+   timestamp already in every frame. Prototyping (see
+   [docs/CLIENT.md](docs/CLIENT.md)) found the naive approaches (queue
+   threshold alone; PTS + sync=true on a test sink) don't smooth ongoing
+   jitter as expected -- needs real testing against a live pulsesink,
+   not just a headless sandbox, before shipping. A small proven-safe
+   start-of-call prebuffer is in place in the meantime.
 4. **Speaker routing (done on Android), reconnect indicator.**
    Ringtone: done on Sailfish (synthesized SID-style arpeggio, see
    [docs/CLIENT.md](docs/CLIENT.md)); Android still needs one.
