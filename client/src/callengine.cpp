@@ -6,6 +6,10 @@
 #include <QDebug>
 #include <cstring>
 
+#ifdef HAVE_NOTIFICATIONS
+#include <notification.h>
+#endif
+
 namespace {
 const int kProtoVersion = 1;
 const int kBackoffMs[] = { 1000, 2000, 5000 };   // then stays at 5000
@@ -252,6 +256,25 @@ void CallEngine::onTextMessage(const QString &msg)
             setError(tr("%1 is not online").arg(m_peerName));
         else
             setError(reason);
+    } else if (type == QLatin1String("text")) {
+        const QString from = o.value(QStringLiteral("from")).toString();
+        const QString msg = o.value(QStringLiteral("message")).toString();
+        emit textReceived(from, msg);
+#ifdef HAVE_NOTIFICATIONS
+        // A system notification (not just an in-page label) so this is
+        // seen whether the UI is foregrounded or not -- same reasoning as
+        // why the ringtone/blip live in CallEngine rather than the QML:
+        // the daemon owns this engine too, with no UI open at all.
+        Notification n;
+        n.setAppName(QStringLiteral("PanicCall"));
+        n.setSummary(from);
+        n.setBody(msg);
+        n.setCategory(QStringLiteral("x-mykelsilver.paniccall.text"));
+        n.publish();
+#else
+        qWarning() << "paniccall: text from" << from << ":" << msg
+                   << "(built without notification support)";
+#endif
     }
     // Unknown types: ignore (forward compatible).
 }
@@ -282,6 +305,17 @@ void CallEngine::hangup()
     stopAudio();
     if (m_state == QLatin1String("in_call") || m_state == QLatin1String("ringing"))
         setState(QStringLiteral("idle"));
+}
+
+void CallEngine::sendText(const QString &message)
+{
+    const QString trimmed = message.trimmed().left(200);
+    if (trimmed.isEmpty())
+        return;
+    QVariantMap m;
+    m.insert(QStringLiteral("type"), QStringLiteral("text"));
+    m.insert(QStringLiteral("message"), trimmed);
+    sendJson(m);
 }
 
 void CallEngine::sendKeepalivePing()

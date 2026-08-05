@@ -61,6 +61,7 @@ public:
     Q_INVOKABLE void startCall();   // caller: send "call" + stream immediately
     Q_INVOKABLE void answer();      // callee: open audio (manual accept)
     Q_INVOKABLE void hangup();
+    Q_INVOKABLE void sendText(const QString &message);   // short canned message
 
     // App-level keepalive: tiny JSON frame to keep NAT/radio paths warm.
     // The server ignores unknown types by protocol rule.
@@ -80,6 +81,7 @@ signals:
     void notifyPresenceChanged();
     void lastErrorChanged();
     void incomingCall(const QString &from);
+    void textReceived(const QString &from, const QString &message);
     // Internal: crosses from the GStreamer streaming thread to the Qt
     // main thread (queued). Do not connect from QML.
     void audioFrameCaptured(const QByteArray &frame);

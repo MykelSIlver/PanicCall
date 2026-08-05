@@ -7,6 +7,17 @@ QT += websockets dbus
 # -lsailfishapp drops off the link line (undefined references in main).
 PKGCONFIG += gstreamer-1.0 gstreamer-app-1.0
 
+# System notifications for incoming text messages (works whether the UI is
+# foregrounded or not). Optional/guarded like mlite5 and keepalive in
+# daemon.pro: falls back to a qWarning log line if the target lacks the
+# -devel package (install with:
+#   sfdk tools package-install <target> nemonotifications-qt5-devel
+# if this feature is silently missing at runtime).
+packagesExist(nemonotifications-qt5) {
+    DEFINES += HAVE_NOTIFICATIONS
+    PKGCONFIG += nemonotifications-qt5
+}
+
 SOURCES += src/harbour-paniccall.cpp \
     src/callengine.cpp \
     src/daemonproxy.cpp

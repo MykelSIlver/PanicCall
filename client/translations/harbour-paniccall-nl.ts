@@ -4,6 +4,22 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Call me on MeshChat instead</source>
+        <translation>Bel me op MeshChat</translation>
+    </message>
+    <message>
+        <source>Send: "%1"</source>
+        <translation>Verstuur: "%1"</translation>
+    </message>
+    <message>
+        <source>Quick message</source>
+        <translation>Snel bericht</translation>
+    </message>
+    <message>
+        <source>One-tap message the button on the main screen sends</source>
+        <translation>Bericht dat de knop op het hoofdscherm met één tik verstuurt</translation>
+    </message>
+    <message>
         <source>Presence chirp</source>
         <translation>Aanwezigheidspiepje</translation>
     </message>

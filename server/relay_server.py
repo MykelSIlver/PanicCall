@@ -231,6 +231,20 @@ class Relay:
             log.info("HANGUP %s", member.display)
             if peer_conn is not None:
                 await send_json(peer_conn, {"type": "hangup", "from": member.display})
+        elif mtype == "text":
+            raw_text = "".join(
+                ch for ch in str(msg.get("message", ""))
+                if ch.isprintable())[:200].strip()
+            if not raw_text:
+                return
+            if peer_conn is None:
+                await send_json(conn, {"type": "error", "reason": "peer_offline"})
+            else:
+                log.info("TEXT %s -> %s: %.60s",
+                         member.display, member.peer.display, raw_text)
+                await send_json(peer_conn, {
+                    "type": "text", "from": member.display, "message": raw_text,
+                })
         # unknown types: ignore (forward compatible)
 
 

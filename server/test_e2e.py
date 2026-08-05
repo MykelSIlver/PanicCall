@@ -150,8 +150,35 @@ async def main():
     w = await hello(ws_b2, TOK_B)
     check("B welcome shows runtime name", w.get("peer") == "Mickey")
 
-    await ws_a3.close()
+    # 12. text: relayed with sender's display name
+    await ws_a3.send(json.dumps({"type": "text", "message": "call me on MeshChat"}))
+    msg = await recv_json(ws_b2)
+    check("text relayed with correct payload",
+          msg.get("type") == "text" and msg.get("from") == "Mickey"
+          and msg.get("message") == "call me on MeshChat")
+
+    # 13. text: server truncates to 200 chars, doesn't reject
+    long_text = "x" * 500
+    await ws_a3.send(json.dumps({"type": "text", "message": long_text}))
+    msg = await recv_json(ws_b2)
+    check("text truncated to 200 chars", len(msg.get("message", "")) == 200)
+
+    # 14. text: peer offline gives the same generic error as call
     await ws_b2.close()
+    await ws_a3.send(json.dumps({"type": "text", "message": "hello?"}))
+    # Earlier steps (B's own close+reconnect just above) leave presence
+    # noise (peer_offline/peer_online/peer_name) queued ahead of the real
+    # response; skip anything that isn't the error we're waiting for
+    # rather than trying to predict exactly how many pushes precede it.
+    msg = {}
+    for _ in range(8):
+        msg = await recv_json(ws_a3)
+        if msg.get("type") == "error":
+            break
+    check("text to offline peer errors", msg.get("type") == "error"
+          and msg.get("reason") == "peer_offline")
+
+    await ws_a3.close()
 
     print()
     if FAILURES:

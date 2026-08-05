@@ -30,6 +30,11 @@ Page {
         key: "/apps/harbour-paniccall/notifyPresence"
         defaultValue: false
     }
+    ConfigurationValue {
+        id: cfgQuickMessage
+        key: "/apps/harbour-paniccall/quickMessage"
+        defaultValue: qsTr("Call me on MeshChat instead")
+    }
 
     Component.onCompleted: {
         // In daemon mode the daemon reads dconf itself and owns the
@@ -136,6 +141,14 @@ Page {
                 }
             }
 
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(implicitWidth, page.width - 4 * Theme.horizontalPageMargin)
+                text: qsTr("Send: \"%1\"").arg(cfgQuickMessage.value)
+                enabled: callEngine.state === "idle"
+                onClicked: callEngine.sendText(cfgQuickMessage.value)
+            }
+
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: page.width - 2 * Theme.horizontalPageMargin
@@ -157,6 +170,7 @@ Page {
                 cfgName.value = nameField.text.trim()
                 cfgAutoAnswer.value = autoSwitch.checked
                 cfgNotifyPresence.value = presenceSwitch.checked
+                cfgQuickMessage.value = quickMessageField.text.trim()
                 if (!daemonMode) {
                     callEngine.autoAnswer = autoSwitch.checked
                     callEngine.notifyPresence = presenceSwitch.checked
@@ -209,6 +223,14 @@ Page {
                         text: qsTr("Presence chirp")
                         description: qsTr("Short sound when your contact comes online or goes offline")
                         checked: cfgNotifyPresence.value
+                    }
+                    TextField {
+                        id: quickMessageField
+                        width: parent.width
+                        label: qsTr("Quick message")
+                        description: qsTr("One-tap message the button on the main screen sends")
+                        text: cfgQuickMessage.value
+                        maximumLength: 200
                     }
                 }
             }

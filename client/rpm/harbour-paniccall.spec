@@ -19,6 +19,10 @@ BuildRequires:  pkgconfig(gstreamer-1.0)
 BuildRequires:  pkgconfig(gstreamer-app-1.0)
 BuildRequires:  desktop-file-utils
 BuildRequires:  qt5-qttools-linguist
+# nemonotifications-qt5-devel is intentionally NOT a hard BuildRequires:
+# text-message notifications degrade to a log line if it's absent from
+# the target (see harbour-paniccall.pro). Install it for the real
+# feature: sfdk tools package-install <target> nemonotifications-qt5-devel
 
 %description
 Walkie-talkie style panic call between two paired SailfishOS devices,

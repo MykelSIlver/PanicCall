@@ -4,6 +4,22 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Call me on MeshChat instead</source>
+        <translation>Call me on MeshChat instead</translation>
+    </message>
+    <message>
+        <source>Send: "%1"</source>
+        <translation>Send: "%1"</translation>
+    </message>
+    <message>
+        <source>Quick message</source>
+        <translation>Quick message</translation>
+    </message>
+    <message>
+        <source>One-tap message the button on the main screen sends</source>
+        <translation>One-tap message the button on the main screen sends</translation>
+    </message>
+    <message>
         <source>Presence chirp</source>
         <translation>Presence chirp</translation>
     </message>

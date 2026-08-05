@@ -49,7 +49,9 @@ over. Clients may therefore always reconnect blindly.
 | server → client | `{"type":"hangup","from":"Dad"}`               | Peer hung up |
 | server → client | `{"type":"peer_online"}` / `{"type":"peer_offline"}` | Presence change of the peer |
 | server → client | `{"type":"peer_name","name":"Alice"}`          | Peer (re)connected with a display name; update the UI |
-| server → client | `{"type":"error","reason":"..."}`              | Non-fatal error (e.g. peer offline on `call`) |
+| server → client | `{"type":"error","reason":"..."}`              | Non-fatal error (e.g. peer offline on `call` or `text`) |
+| client → server | `{"type":"text","message":"..."}`              | Send a short canned message to the peer |
+| server → client | `{"type":"text","from":"Kid","message":"..."}` | Peer sent a short message; show it (e.g. as a system notification) |
 
 Clients **must ignore** unknown `type` values (forward compatible).
 
@@ -57,6 +59,15 @@ Keepalive: the server sends a WebSocket **ping** (protocol level, not
 JSON) every 30 s. QWebSocket answers with a pong automatically; no client
 code needed. After 3 missed pongs the server drops the connection and the
 peer receives `peer_offline`.
+
+`text` is capped at 200 characters server-side and stripped of
+non-printable characters; longer input is silently truncated, not
+rejected. Like everything else in v1, it is **not** application-level
+encrypted -- TLS via nginx is the only protection in transit. Intended
+for short canned messages ("call me on MeshChat instead"), not a chat
+feature: there is no history, no delivery receipt beyond the existing
+`error`/`peer_offline` path, and clients are expected to show it as a
+transient notification rather than persist it.
 
 ## 3. Audio frames (binary)
 
