@@ -82,6 +82,7 @@ signals:
     void lastErrorChanged();
     void incomingCall(const QString &from);
     void textReceived(const QString &from, const QString &message);
+    void textSent(bool queued);   // feedback for our own sendText(): delivered vs queued
     // Internal: crosses from the GStreamer streaming thread to the Qt
     // main thread (queued). Do not connect from QML.
     void audioFrameCaptured(const QByteArray &frame);

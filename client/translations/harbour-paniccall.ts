@@ -4,6 +4,14 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Message queued — will arrive when %1 comes online</source>
+        <translation>Message queued — will arrive when %1 comes online</translation>
+    </message>
+    <message>
+        <source>Message sent</source>
+        <translation>Message sent</translation>
+    </message>
+    <message>
         <source>Call me on MeshChat instead</source>
         <translation>Call me on MeshChat instead</translation>
     </message>

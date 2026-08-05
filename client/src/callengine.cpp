@@ -275,6 +275,8 @@ void CallEngine::onTextMessage(const QString &msg)
         qWarning() << "paniccall: text from" << from << ":" << msg
                    << "(built without notification support)";
 #endif
+    } else if (type == QLatin1String("text_sent")) {
+        emit textSent(o.value(QStringLiteral("queued")).toBool());
     }
     // Unknown types: ignore (forward compatible).
 }

@@ -4,6 +4,14 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Message queued — will arrive when %1 comes online</source>
+        <translation>Bericht wacht op aflevering — komt aan zodra %1 online is</translation>
+    </message>
+    <message>
+        <source>Message sent</source>
+        <translation>Bericht verzonden</translation>
+    </message>
+    <message>
         <source>Call me on MeshChat instead</source>
         <translation>Bel me op MeshChat</translation>
     </message>

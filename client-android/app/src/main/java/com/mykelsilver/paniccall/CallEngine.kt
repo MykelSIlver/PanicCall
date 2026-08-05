@@ -55,6 +55,13 @@ class CallEngine {
     val textReceived = MutableStateFlow<TextEvent?>(null)
     private var textEventCounter = 0L
 
+    /** Feedback for our own sendText(): delivered vs queued. Same nonce
+     * reasoning as TextEvent -- sending the same offline "queued=true"
+     * twice in a row must still re-trigger the UI both times. */
+    data class TextSentEvent(val queued: Boolean, val id: Long)
+    val textSent = MutableStateFlow<TextSentEvent?>(null)
+    private var textSentCounter = 0L
+
     var onCallSetupMeasured: ((Long) -> Unit)? = null
 
     private val main = Handler(Looper.getMainLooper())
@@ -197,6 +204,9 @@ class CallEngine {
                 val from = o.optString("from")
                 val message = o.optString("message")
                 textReceived.value = TextEvent(from, message, textEventCounter++)
+            }
+            "text_sent" -> {
+                textSent.value = TextSentEvent(o.optBoolean("queued"), textSentCounter++)
             }
             "peer_name" -> o.optString("name").takeIf { it.isNotEmpty() }
                 ?.let { peerName.value = it }

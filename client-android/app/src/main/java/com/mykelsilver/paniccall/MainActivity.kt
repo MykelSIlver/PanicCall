@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 
 // Same default as the Sailfish side, for consistency across platforms.
 private const val DEFAULT_QUICK_MESSAGE = "Call me on MeshChat instead"
@@ -95,6 +96,7 @@ class MainActivity : ComponentActivity() {
                 val online by svc.engine.peerOnline.collectAsStateWithLifecycle()
                 val err by svc.engine.lastError.collectAsStateWithLifecycle()
                 val speakerOn by svc.speakerOn.collectAsStateWithLifecycle()
+                val textSent by svc.engine.textSent.collectAsStateWithLifecycle()
 
                 Text(when (state) {
                     "disconnected" -> "Not connected"
@@ -135,6 +137,21 @@ class MainActivity : ComponentActivity() {
                     enabled = state == "idle"
                 ) {
                     Text("Send: \"$quickMessage\"")
+                }
+
+                var sendStatus by remember { mutableStateOf("") }
+                LaunchedEffect(textSent?.id) {
+                    val ev = textSent
+                    if (ev != null) {
+                        sendStatus = if (ev.queued)
+                            "Message queued — will arrive when ${peer.ifBlank { "…" }} comes online"
+                        else "Message sent"
+                        delay(4000)
+                        sendStatus = ""
+                    }
+                }
+                if (sendStatus.isNotEmpty()) {
+                    Text(sendStatus, fontSize = 12.sp, color = Color.Gray)
                 }
 
                 if (state == "in_call") {

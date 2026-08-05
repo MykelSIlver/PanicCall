@@ -5,6 +5,26 @@ import Nemo.Configuration 1.0
 Page {
     id: page
 
+    // Transient feedback for our own sendText() tap: "sent" vs "queued".
+    // Purely a UI concern -- no need for this to live in CallEngine.
+    property string sendStatus: ""
+
+    Connections {
+        target: callEngine
+        onTextSent: {
+            sendStatus = queued
+                ? qsTr("Message queued — will arrive when %1 comes online")
+                      .arg(callEngine.peerName)
+                : qsTr("Message sent")
+            sendStatusTimer.restart()
+        }
+    }
+    Timer {
+        id: sendStatusTimer
+        interval: 4000
+        onTriggered: page.sendStatus = ""
+    }
+
     ConfigurationValue {
         id: cfgUrl
         key: "/apps/harbour-paniccall/serverUrl"
@@ -147,6 +167,17 @@ Page {
                 text: qsTr("Send: \"%1\"").arg(cfgQuickMessage.value)
                 enabled: callEngine.state === "idle"
                 onClicked: callEngine.sendText(cfgQuickMessage.value)
+            }
+
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: page.width - 4 * Theme.horizontalPageMargin
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.fontSizeExtraSmall
+                color: Theme.secondaryColor
+                visible: page.sendStatus !== ""
+                text: page.sendStatus
             }
 
             Label {

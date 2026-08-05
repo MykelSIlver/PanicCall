@@ -49,9 +49,10 @@ over. Clients may therefore always reconnect blindly.
 | server → client | `{"type":"hangup","from":"Dad"}`               | Peer hung up |
 | server → client | `{"type":"peer_online"}` / `{"type":"peer_offline"}` | Presence change of the peer |
 | server → client | `{"type":"peer_name","name":"Alice"}`          | Peer (re)connected with a display name; update the UI |
-| server → client | `{"type":"error","reason":"..."}`              | Non-fatal error (e.g. peer offline on `call` or `text`) |
+| server → client | `{"type":"error","reason":"..."}`              | Non-fatal error (e.g. peer offline on `call`) |
 | client → server | `{"type":"text","message":"..."}`              | Send a short canned message to the peer |
-| server → client | `{"type":"text","from":"Kid","message":"..."}` | Peer sent a short message; show it (e.g. as a system notification) |
+| server → client | `{"type":"text","from":"Kid","message":"..."}` | Peer sent a short message (live or delivered from queue); show it (e.g. as a system notification) |
+| server → client | `{"type":"text_sent","queued":true\|false}`     | Ack for a sent `text`: `queued:false` means delivered immediately, `queued:true` means the peer was offline and it will be delivered on their next reconnect |
 
 Clients **must ignore** unknown `type` values (forward compatible).
 
@@ -65,9 +66,21 @@ non-printable characters; longer input is silently truncated, not
 rejected. Like everything else in v1, it is **not** application-level
 encrypted -- TLS via nginx is the only protection in transit. Intended
 for short canned messages ("call me on MeshChat instead"), not a chat
-feature: there is no history, no delivery receipt beyond the existing
-`error`/`peer_offline` path, and clients are expected to show it as a
-transient notification rather than persist it.
+feature: there is no history beyond a single queued message, and
+clients are expected to show it as a transient notification rather
+than persist it.
+
+If the peer is offline when a `text` is sent, the relay holds **one**
+pending message per member (in memory only) and delivers it -- using
+the exact same `{"type":"text",...}` shape as a live relay, so clients
+need no special handling for the queued case -- the moment that member
+next completes the `hello` handshake. Sending a second `text` while the
+peer is still offline overwrites the first; only the latest matters.
+This is deliberately not durable: a relay restart loses any pending
+message. Good enough for a short-lived "call me" nudge; if this ever
+needs to survive a restart, the natural next step is writing the
+pending message to disk alongside the process, not a bigger change to
+the wire protocol.
 
 ## 3. Audio frames (binary)
 

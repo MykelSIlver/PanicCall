@@ -48,6 +48,10 @@ class Member:
     peer: "Member" = None                      # set after config load
     conn: ServerConnection = None              # live connection or None
     dropped_audio: int = field(default=0)      # frames dropped (peer offline)
+    pending_text: dict = field(default=None)   # one queued text ({"from","message"}),
+                                                # delivered on next reconnect; in-memory
+                                                # only (lost on relay restart -- fine for
+                                                # v1, see docs/PROTOCOL.md)
 
 
 def load_pairs(path: Path) -> dict[str, Member]:
@@ -173,6 +177,16 @@ class Relay:
             # keep the peer's UI current with our (possibly new) name
             await send_json(member.peer.conn,
                             {"type": "peer_name", "name": member.display})
+        if member.pending_text is not None:
+            # Same "text" shape as a live relay -- the client needs no
+            # special handling for a queued-then-delivered message.
+            log.info("TEXT (queued) delivered to %s", member.display)
+            await send_json(conn, {
+                "type": "text",
+                "from": member.pending_text["from"],
+                "message": member.pending_text["message"],
+            })
+            member.pending_text = None
         return member
 
     def _lookup(self, token: str) -> Member | None:
@@ -238,13 +252,22 @@ class Relay:
             if not raw_text:
                 return
             if peer_conn is None:
-                await send_json(conn, {"type": "error", "reason": "peer_offline"})
+                # No error here: the message is queued, not lost. A prior
+                # pending message (if any) is intentionally overwritten --
+                # only the latest canned message matters for this feature.
+                member.peer.pending_text = {
+                    "from": member.display, "message": raw_text,
+                }
+                log.info("TEXT %s -> %s (OFFLINE, queued): %.60s",
+                         member.display, member.peer.display, raw_text)
+                await send_json(conn, {"type": "text_sent", "queued": True})
             else:
                 log.info("TEXT %s -> %s: %.60s",
                          member.display, member.peer.display, raw_text)
                 await send_json(peer_conn, {
                     "type": "text", "from": member.display, "message": raw_text,
                 })
+                await send_json(conn, {"type": "text_sent", "queued": False})
         # unknown types: ignore (forward compatible)
 
 

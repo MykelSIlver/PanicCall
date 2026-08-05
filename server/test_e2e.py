@@ -150,35 +150,75 @@ async def main():
     w = await hello(ws_b2, TOK_B)
     check("B welcome shows runtime name", w.get("peer") == "Mickey")
 
-    # 12. text: relayed with sender's display name
+    def skip_to(ws, wanted_type):
+        # Reconnect/close churn above (this section and earlier) leaves
+        # presence noise (peer_offline/peer_online/peer_name) queued on
+        # ws_a3 ahead of whatever we actually want next; skip anything
+        # that doesn't match rather than trying to predict exactly how
+        # many pushes precede it. Used for every read from here on.
+        async def _run():
+            for _ in range(8):
+                m = await recv_json(ws)
+                if m.get("type") == wanted_type:
+                    return m
+            return {}
+        return _run()
+
+    # 12. text: relayed with sender's display name, sender gets a
+    # non-queued ack since the peer was online
     await ws_a3.send(json.dumps({"type": "text", "message": "call me on MeshChat"}))
     msg = await recv_json(ws_b2)
     check("text relayed with correct payload",
           msg.get("type") == "text" and msg.get("from") == "Mickey"
           and msg.get("message") == "call me on MeshChat")
+    ack = await skip_to(ws_a3, "text_sent")
+    check("sender ack: delivered live (queued=false)",
+          ack.get("type") == "text_sent" and ack.get("queued") is False)
 
     # 13. text: server truncates to 200 chars, doesn't reject
     long_text = "x" * 500
     await ws_a3.send(json.dumps({"type": "text", "message": long_text}))
     msg = await recv_json(ws_b2)
     check("text truncated to 200 chars", len(msg.get("message", "")) == 200)
+    ack = await skip_to(ws_a3, "text_sent")
+    check("sender ack after truncated text", ack.get("type") == "text_sent")
 
-    # 14. text: peer offline gives the same generic error as call
+    # 14. text while peer offline: queued (not lost), sender gets
+    # queued=true, a second text overwrites the first, and the *latest*
+    # message is delivered -- using the normal "text" shape -- the
+    # moment the peer reconnects.
     await ws_b2.close()
-    await ws_a3.send(json.dumps({"type": "text", "message": "hello?"}))
-    # Earlier steps (B's own close+reconnect just above) leave presence
-    # noise (peer_offline/peer_online/peer_name) queued ahead of the real
-    # response; skip anything that isn't the error we're waiting for
-    # rather than trying to predict exactly how many pushes precede it.
-    msg = {}
-    for _ in range(8):
-        msg = await recv_json(ws_a3)
-        if msg.get("type") == "error":
-            break
-    check("text to offline peer errors", msg.get("type") == "error"
-          and msg.get("reason") == "peer_offline")
+
+    # ws_b2.close() returning doesn't guarantee the SERVER has finished
+    # processing the disconnect yet (member.conn is cleared in its own
+    # coroutine's finally-block). Wait for the peer_offline push itself
+    # -- proof the server-side state is updated -- before relying on the
+    # peer being seen as offline; otherwise a text sent immediately after
+    # close() can race ahead and hit a still-not-yet-cleared connection.
+    off = await skip_to(ws_a3, "peer_offline")
+    check("peer_offline observed before offline-text tests",
+          off.get("type") == "peer_offline")
+
+    await ws_a3.send(json.dumps({"type": "text", "message": "first (will be overwritten)"}))
+    ack = await skip_to(ws_a3, "text_sent")
+    check("queued ack for first offline text",
+          ack.get("type") == "text_sent" and ack.get("queued") is True)
+
+    await ws_a3.send(json.dumps({"type": "text", "message": "second (should win)"}))
+    ack = await skip_to(ws_a3, "text_sent")
+    check("queued ack for second offline text",
+          ack.get("type") == "text_sent" and ack.get("queued") is True)
+
+    ws_b3 = await websockets.connect(URI)
+    w = await hello(ws_b3, TOK_B)
+    check("B3 welcome", w.get("type") == "welcome")
+    delivered = await skip_to(ws_b3, "text")
+    check("only the latest queued text is delivered on reconnect",
+          delivered.get("type") == "text" and delivered.get("from") == "Mickey"
+          and delivered.get("message") == "second (should win)")
 
     await ws_a3.close()
+    await ws_b3.close()
 
     print()
     if FAILURES:
