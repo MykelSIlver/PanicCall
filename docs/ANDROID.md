@@ -120,6 +120,26 @@ Doze will also throttle the 2.5-minute keepalive when the phone sleeps
 deeply; the `METRIC wakeup`/`METRIC alive` lines exist to quantify that,
 same philosophy as the Sailfish measuring campaign.
 
+## Quick message
+
+One configurable canned message ("Call me on MeshChat instead" by
+default, same as Sailfish), sent with a single tap via `sendText()` on
+`CallEngine` -- no free-text keyboard, matching the "zero cognitive
+load" design goal from ARCHITECTURE.md. Settings has a plain text field
+to change it; the main-screen button's own label always shows the
+exact text that will be sent, so there's nothing to remember before
+tapping. Enabled only when `state == "idle"`, same gating as the call
+button.
+
+Receiving a text shows a normal (not full-screen) notification on its
+own channel (`paniccall_text`) via `CallService.postTextNotification()`,
+driven by `CallEngine.textReceived` -- a `StateFlow<TextEvent?>` where
+`TextEvent` carries a monotonic `id` alongside `from`/`message`
+specifically so two identical messages in a row still each produce a
+notification (a plain `StateFlow` only notifies on an actual value
+*change*, so without the id a repeat send would silently no-op the
+second time).
+
 ## Skeleton status
 
 Written blind against the SDK (no Android toolchain in the authoring

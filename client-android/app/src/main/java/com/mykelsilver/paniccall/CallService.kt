@@ -35,8 +35,10 @@ class CallService : LifecycleService() {
         private const val TAG = "PanicCall"
         private const val CH_ONGOING = "paniccall_service"
         private const val CH_CALL = "paniccall_incoming"
+        private const val CH_TEXT = "paniccall_text"
         private const val NOTIF_ONGOING = 1
         private const val NOTIF_CALL = 2
+        private const val NOTIF_TEXT = 3
 
         fun start(ctx: Context) {
             ctx.startForegroundService(Intent(ctx, CallService::class.java))
@@ -86,6 +88,11 @@ class CallService : LifecycleService() {
                 // on answer/hangup/peer-hangup/disconnect -- one place, same
                 // "can't forget to stop it" guarantee as the Sailfish side.
                 if (s == "ringing") ringLoop()
+            }
+        }
+        lifecycleScope.launch {
+            engine.textReceived.collectLatest { event ->
+                if (event != null) postTextNotification(event.from, event.message)
             }
         }
         lifecycleScope.launch {
@@ -230,6 +237,9 @@ class CallService : LifecycleService() {
                 // this notification -- avoids playing the ringtone twice.
                 setSound(null, null)
         })
+        nm.createNotificationChannel(NotificationChannel(
+            CH_TEXT, "Quick messages",
+            NotificationManager.IMPORTANCE_DEFAULT))
     }
 
     private fun contentIntent(): PendingIntent = PendingIntent.getActivity(
@@ -258,5 +268,16 @@ class CallService : LifecycleService() {
             .setAutoCancel(true)
             .build()
         getSystemService(NotificationManager::class.java).notify(NOTIF_CALL, n)
+    }
+
+    private fun postTextNotification(from: String, message: String) {
+        val n = Notification.Builder(this, CH_TEXT)
+            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            .setContentTitle(from)
+            .setContentText(message)
+            .setContentIntent(contentIntent())
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(NOTIF_TEXT, n)
     }
 }

@@ -30,6 +30,8 @@ object Protocol {
     fun call(): String = JSONObject().put("type", "call").toString()
     fun hangup(): String = JSONObject().put("type", "hangup").toString()
     fun ping(): String = JSONObject().put("type", "ping").toString()
+    fun text(message: String): String =
+        JSONObject().put("type", "text").put("message", message.trim().take(200)).toString()
 
     /**
      * 7-byte header + raw Opus packet:

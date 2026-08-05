@@ -44,6 +44,17 @@ class CallEngine {
     /** Emits the caller's name on each incoming call (for notifications). */
     val incomingCall = MutableStateFlow<String?>(null)
 
+    /**
+     * `id` exists purely so two consecutive IDENTICAL messages from the
+     * same peer still produce distinct values -- StateFlow only notifies
+     * collectors when the value actually *changes*, so without a nonce a
+     * repeated "call me on MeshChat" in a row would silently not
+     * re-trigger the notification on the second send.
+     */
+    data class TextEvent(val from: String, val message: String, val id: Long)
+    val textReceived = MutableStateFlow<TextEvent?>(null)
+    private var textEventCounter = 0L
+
     var onCallSetupMeasured: ((Long) -> Unit)? = null
 
     private val main = Handler(Looper.getMainLooper())
@@ -91,6 +102,11 @@ class CallEngine {
     }
 
     fun sendKeepalivePing() { ws?.send(Protocol.ping()) }
+
+    fun sendText(message: String) = main.post {
+        val trimmed = message.trim()
+        if (trimmed.isNotEmpty()) ws?.send(Protocol.text(trimmed))
+    }
 
     fun shutdown() = main.post {
         wantConnected = false
@@ -176,6 +192,11 @@ class CallEngine {
             "peer_offline" -> {
                 peerOnline.value = false
                 if (notifyPresence.value) playPresenceBlip(online = false)
+            }
+            "text" -> {
+                val from = o.optString("from")
+                val message = o.optString("message")
+                textReceived.value = TextEvent(from, message, textEventCounter++)
             }
             "peer_name" -> o.optString("name").takeIf { it.isNotEmpty() }
                 ?.let { peerName.value = it }

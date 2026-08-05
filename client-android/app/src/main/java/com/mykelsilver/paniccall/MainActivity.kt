@@ -28,6 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+// Same default as the Sailfish side, for consistency across platforms.
+private const val DEFAULT_QUICK_MESSAGE = "Call me on MeshChat instead"
+
 class MainActivity : ComponentActivity() {
 
     private var service by mutableStateOf<CallService?>(null)
@@ -70,6 +73,10 @@ class MainActivity : ComponentActivity() {
     private fun Screen() {
         val svc = service
         var showSettings by remember { mutableStateOf(false) }
+        var quickMessage by remember {
+            mutableStateOf(getSharedPreferences("paniccall", MODE_PRIVATE)
+                .getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE)
+        }
 
         Scaffold(topBar = {
             TopAppBar(title = { Text("PanicCall") }, actions = {
@@ -122,6 +129,14 @@ class MainActivity : ComponentActivity() {
                         fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
 
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { svc.engine.sendText(quickMessage) },
+                    enabled = state == "idle"
+                ) {
+                    Text("Send: \"$quickMessage\"")
+                }
+
                 if (state == "in_call") {
                     Spacer(Modifier.height(24.dp))
                     FilterChip(
@@ -141,6 +156,8 @@ class MainActivity : ComponentActivity() {
         if (showSettings) SettingsDialog(onDone = {
             showSettings = false
             service?.applySettings()
+            quickMessage = getSharedPreferences("paniccall", MODE_PRIVATE)
+                .getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE
             requestBatteryExemption()
         })
     }
@@ -154,6 +171,9 @@ class MainActivity : ComponentActivity() {
         var auto by remember { mutableStateOf(p.getBoolean("autoAnswer", true)) }
         var speaker by remember { mutableStateOf(p.getBoolean("defaultSpeaker", true)) }
         var presence by remember { mutableStateOf(p.getBoolean("notifyPresence", false)) }
+        var quickMsg by remember {
+            mutableStateOf(p.getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE)
+        }
 
         AlertDialog(
             onDismissRequest = onDone,
@@ -164,7 +184,8 @@ class MainActivity : ComponentActivity() {
                         .putString("name", name.trim())
                         .putBoolean("autoAnswer", auto)
                         .putBoolean("defaultSpeaker", speaker)
-                        .putBoolean("notifyPresence", presence).apply()
+                        .putBoolean("notifyPresence", presence)
+                        .putString("quickMessage", quickMsg.trim().take(200)).apply()
                     onDone()
                 }) { Text("Save") }
             },
@@ -192,6 +213,8 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Text("Presence chirp (contact online/offline)")
                     }
+                    OutlinedTextField(quickMsg, { quickMsg = it },
+                        label = { Text("Quick message") }, singleLine = true)
                 }
             })
     }
