@@ -41,6 +41,13 @@ tokens. The callee can auto-answer: audio opens the instant the call arrives.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the real explanation and
 [docs/PROTOCOL.md](docs/PROTOCOL.md) for the wire format.
 
+Beyond voice, either side can send one short canned message ("call me on
+MeshChat instead") with a single tap — no keyboard, same zero-cognitive-load
+philosophy as the call button itself. If the other person is offline, the
+relay holds the message and delivers it the moment they reconnect; each
+device keeps its own local history of what it sent and received, with a
+checkmark once a sent message is confirmed delivered.
+
 ## ⚠️ Alpha status — read this before trusting it with anything
 
 This project is in its **very early infancy**. It works — voice flows crystal
@@ -66,6 +73,14 @@ clear through the whole chain in testing — but:
   versioned (`proto`), so mismatched clients fail loudly instead of weirdly.
 - Tested on the SailfishOS 5.0 emulator and, so far, exactly zero real
   emergencies.
+- **Text messages are a nudge, not a chat.** One configurable canned
+  message per device, not free text — deliberately, see the
+  zero-cognitive-load philosophy above. Offline delivery is durable (a
+  relay restart won't lose a queued message), but the *delivery
+  receipt* itself isn't: if the sender happens to be offline at the
+  exact moment their message arrives, the checkmark never comes, even
+  though the message did. Sent/delivered only, no read receipts. Not
+  encrypted either — same as everything else in v1.
 
 - The **Android client** (see [docs/ANDROID.md](docs/ANDROID.md)) speaks
   the same protocol against the same relay, and has been tested working
