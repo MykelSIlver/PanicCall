@@ -4,6 +4,10 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>History</source>
+        <translation>Geschiedenis</translation>
+    </message>
+    <message>
         <source>Message queued — will arrive when %1 comes online</source>
         <translation>Bericht wacht op aflevering — komt aan zodra %1 online is</translation>
     </message>
@@ -144,6 +148,29 @@
     <message>
         <source>%1 is not online</source>
         <translation>%1 is niet online</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryPage</name>
+    <message>
+        <source>Message history</source>
+        <translation>Berichtgeschiedenis</translation>
+    </message>
+    <message>
+        <source>Clear history</source>
+        <translation>Geschiedenis wissen</translation>
+    </message>
+    <message>
+        <source>Clearing history</source>
+        <translation>Geschiedenis wordt gewist</translation>
+    </message>
+    <message>
+        <source>You</source>
+        <translation>Jij</translation>
+    </message>
+    <message>
+        <source>No messages yet.</source>
+        <translation>Nog geen berichten.</translation>
     </message>
 </context>
 </TS>

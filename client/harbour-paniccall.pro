@@ -20,12 +20,15 @@ packagesExist(nemonotifications-qt5) {
 
 SOURCES += src/harbour-paniccall.cpp \
     src/callengine.cpp \
+    src/messagehistory.cpp \
     src/daemonproxy.cpp
 HEADERS += src/callengine.h \
+    src/messagehistory.h \
     src/daemonproxy.h
 
 DISTFILES += qml/harbour-paniccall.qml \
     qml/pages/MainPage.qml \
+    qml/pages/HistoryPage.qml \
     qml/cover/CoverPage.qml \
     rpm/harbour-paniccall.spec \
     harbour-paniccall.desktop

@@ -23,8 +23,8 @@ packagesExist(nemonotifications-qt5) {
 }
 
 INCLUDEPATH += ../src
-SOURCES += daemon_main.cpp engineadaptor.cpp ../src/callengine.cpp
-HEADERS += engineadaptor.h configsource.h ../src/callengine.h
+SOURCES += daemon_main.cpp engineadaptor.cpp ../src/callengine.cpp ../src/messagehistory.cpp
+HEADERS += engineadaptor.h configsource.h ../src/callengine.h ../src/messagehistory.h
 
 target.path = /usr/bin
 service.files = harbour-paniccall-daemon.service

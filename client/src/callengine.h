@@ -27,6 +27,8 @@
 #include <gst/app/gstappsink.h>
 #include <gst/app/gstappsrc.h>
 
+#include "messagehistory.h"
+
 class CallEngine : public QObject
 {
     Q_OBJECT
@@ -38,6 +40,7 @@ class CallEngine : public QObject
     Q_PROPERTY(bool autoAnswer READ autoAnswer WRITE setAutoAnswer NOTIFY autoAnswerChanged)
     Q_PROPERTY(bool notifyPresence READ notifyPresence WRITE setNotifyPresence NOTIFY notifyPresenceChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    Q_PROPERTY(QObject *history READ historyObject CONSTANT)
 
 public:
     explicit CallEngine(QObject *parent = nullptr);
@@ -52,6 +55,7 @@ public:
     bool notifyPresence() const { return m_notifyPresence; }
     void setNotifyPresence(bool on);
     QString lastError() const { return m_lastError; }
+    QObject *historyObject() const { return const_cast<MessageHistory *>(&m_history); }
 
     // Connect (and stay connected, with backoff) to the relay.
     Q_INVOKABLE void configure(const QString &url, const QString &token,
@@ -61,7 +65,11 @@ public:
     Q_INVOKABLE void startCall();   // caller: send "call" + stream immediately
     Q_INVOKABLE void answer();      // callee: open audio (manual accept)
     Q_INVOKABLE void hangup();
-    Q_INVOKABLE void sendText(const QString &message);   // short canned message
+    // Returns the generated message id (Sailfish also logs to history
+    // internally, unlike Android where the caller does that with this
+    // return value -- the id is still returned here for QML/testing
+    // convenience and cross-platform API symmetry).
+    Q_INVOKABLE QString sendText(const QString &message);
 
     // App-level keepalive: tiny JSON frame to keep NAT/radio paths warm.
     // The server ignores unknown types by protocol rule.
@@ -81,8 +89,9 @@ signals:
     void notifyPresenceChanged();
     void lastErrorChanged();
     void incomingCall(const QString &from);
-    void textReceived(const QString &from, const QString &message);
-    void textSent(bool queued);   // feedback for our own sendText(): delivered vs queued
+    void textReceived(const QString &id, const QString &from, const QString &message);
+    void textSent(const QString &id, bool queued);   // feedback for our own sendText()
+    void textDelivered(const QString &id);   // the peer's client has processed our text
     // Internal: crosses from the GStreamer streaming thread to the Qt
     // main thread (queued). Do not connect from QML.
     void audioFrameCaptured(const QByteArray &frame);
@@ -140,6 +149,7 @@ private:
 
     GstElement *m_blipPipe;     // short one-shot presence chirp (own pipe, no
     GstElement *m_blipSrc;      // loop -- plays the online/offline chirp once
+    MessageHistory m_history;
     QTimer      m_blipTimer;    // then tears itself down)
     int         m_blipStep;
     bool        m_blipIsOnline; // which of the two chirp tables is playing

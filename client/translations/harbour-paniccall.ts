@@ -4,6 +4,10 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>History</source>
+        <translation>History</translation>
+    </message>
+    <message>
         <source>Message queued — will arrive when %1 comes online</source>
         <translation>Message queued — will arrive when %1 comes online</translation>
     </message>
@@ -144,6 +148,29 @@
     <message>
         <source>%1 is not online</source>
         <translation>%1 is not online</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryPage</name>
+    <message>
+        <source>Message history</source>
+        <translation>Message history</translation>
+    </message>
+    <message>
+        <source>Clear history</source>
+        <translation>Clear history</translation>
+    </message>
+    <message>
+        <source>Clearing history</source>
+        <translation>Clearing history</translation>
+    </message>
+    <message>
+        <source>You</source>
+        <translation>You</translation>
+    </message>
+    <message>
+        <source>No messages yet.</source>
+        <translation>No messages yet.</translation>
     </message>
 </context>
 </TS>

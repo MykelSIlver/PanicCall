@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
+#include <QUuid>
 #include <QDebug>
 #include <cstring>
 
@@ -257,9 +258,11 @@ void CallEngine::onTextMessage(const QString &msg)
         else
             setError(reason);
     } else if (type == QLatin1String("text")) {
+        const QString id = o.value(QStringLiteral("id")).toString();
         const QString from = o.value(QStringLiteral("from")).toString();
         const QString msg = o.value(QStringLiteral("message")).toString();
-        emit textReceived(from, msg);
+        m_history.addReceived(id, from, msg);
+        emit textReceived(id, from, msg);
 #ifdef HAVE_NOTIFICATIONS
         // A system notification (not just an in-page label) so this is
         // seen whether the UI is foregrounded or not -- same reasoning as
@@ -275,8 +278,25 @@ void CallEngine::onTextMessage(const QString &msg)
         qWarning() << "paniccall: text from" << from << ":" << msg
                    << "(built without notification support)";
 #endif
+        // Ack sent automatically, internally -- no external caller needs
+        // to remember to trigger this (unlike sendTextDelivered() on
+        // Android, which CallService must explicitly call). Not queued
+        // if the original sender is offline right now: see docs/PROTOCOL.md.
+        if (!id.isEmpty()) {
+            QVariantMap ack;
+            ack.insert(QStringLiteral("type"), QStringLiteral("text_delivered"));
+            ack.insert(QStringLiteral("id"), id);
+            sendJson(ack);
+        }
     } else if (type == QLatin1String("text_sent")) {
-        emit textSent(o.value(QStringLiteral("queued")).toBool());
+        const QString id = o.value(QStringLiteral("id")).toString();
+        const bool queued = o.value(QStringLiteral("queued")).toBool();
+        m_history.markStatus(id, queued ? QStringLiteral("queued") : QStringLiteral("sent"));
+        emit textSent(id, queued);
+    } else if (type == QLatin1String("text_delivered")) {
+        const QString id = o.value(QStringLiteral("id")).toString();
+        m_history.markStatus(id, QStringLiteral("delivered"));
+        emit textDelivered(id);
     }
     // Unknown types: ignore (forward compatible).
 }
@@ -309,15 +329,24 @@ void CallEngine::hangup()
         setState(QStringLiteral("idle"));
 }
 
-void CallEngine::sendText(const QString &message)
+QString CallEngine::sendText(const QString &message)
 {
     const QString trimmed = message.trimmed().left(200);
     if (trimmed.isEmpty())
-        return;
+        return QString();
+    // QUuid::createUuid() wraps in braces by default; WithoutBraces is a
+    // Qt 5.11+ enum we can't use on this project's Qt 5.6 target, so the
+    // braces are stripped manually. Result: hex digits + hyphens only,
+    // well within the relay's allowed id charset (see relay_server.py).
+    const QString raw = QUuid::createUuid().toString();
+    const QString id = raw.mid(1, raw.length() - 2);
     QVariantMap m;
     m.insert(QStringLiteral("type"), QStringLiteral("text"));
+    m.insert(QStringLiteral("id"), id);
     m.insert(QStringLiteral("message"), trimmed);
     sendJson(m);
+    m_history.addSent(id, m_peerName, trimmed);
+    return id;
 }
 
 void CallEngine::sendKeepalivePing()

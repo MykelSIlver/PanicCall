@@ -73,6 +73,10 @@ Page {
 
         PullDownMenu {
             MenuItem {
+                text: qsTr("History")
+                onClicked: pageStack.push(Qt.resolvedUrl("HistoryPage.qml"))
+            }
+            MenuItem {
                 text: qsTr("Settings")
                 onClicked: pageStack.push(settingsDialog)
             }
