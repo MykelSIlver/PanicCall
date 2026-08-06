@@ -46,6 +46,7 @@ class CallService : LifecycleService() {
     }
 
     val engine = CallEngine()
+    lateinit var history: MessageHistory   // Context-dependent; see onCreate()
 
     // Speakerphone control. Android routes VOICE_COMMUNICATION streams to
     // the earpiece by default (like a regular phone call, for privacy) —
@@ -66,6 +67,7 @@ class CallService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(AudioManager::class.java)
+        history = MessageHistory(this)
         createChannels()
         val notif = ongoingNotification("PanicCall standby")
         if (Build.VERSION.SDK_INT >= 29) {
@@ -92,7 +94,27 @@ class CallService : LifecycleService() {
         }
         lifecycleScope.launch {
             engine.textReceived.collectLatest { event ->
-                if (event != null) postTextNotification(event.from, event.message)
+                if (event != null) {
+                    postTextNotification(event.from, event.message)
+                    history.addReceived(event.msgId, event.from, event.message)
+                    // Ack back to the sender so their history can show the
+                    // single checkmark. Not queued if they're offline right
+                    // now (see docs/PROTOCOL.md) -- a known, accepted gap.
+                    engine.sendTextDelivered(event.msgId)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            engine.textSent.collectLatest { event ->
+                if (event != null) history.markStatus(event.msgId,
+                    if (event.queued) MessageHistory.Status.QUEUED
+                    else MessageHistory.Status.SENT)
+            }
+        }
+        lifecycleScope.launch {
+            engine.textDelivered.collectLatest { event ->
+                if (event != null)
+                    history.markStatus(event.msgId, MessageHistory.Status.DELIVERED)
             }
         }
         lifecycleScope.launch {

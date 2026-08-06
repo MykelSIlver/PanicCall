@@ -16,6 +16,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // Same default as the Sailfish side, for consistency across platforms.
 private const val DEFAULT_QUICK_MESSAGE = "Call me on MeshChat instead"
@@ -74,6 +79,7 @@ class MainActivity : ComponentActivity() {
     private fun Screen() {
         val svc = service
         var showSettings by remember { mutableStateOf(false) }
+        var showHistory by remember { mutableStateOf(false) }
         var quickMessage by remember {
             mutableStateOf(getSharedPreferences("paniccall", MODE_PRIVATE)
                 .getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE)
@@ -81,6 +87,7 @@ class MainActivity : ComponentActivity() {
 
         Scaffold(topBar = {
             TopAppBar(title = { Text("PanicCall") }, actions = {
+                TextButton(onClick = { showHistory = true }) { Text("History") }
                 TextButton(onClick = { showSettings = true }) { Text("Settings") }
             })
         }) { pad ->
@@ -133,14 +140,17 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = { svc.engine.sendText(quickMessage) },
+                    onClick = {
+                        val id = svc.engine.sendText(quickMessage)
+                        svc.history.addSent(id, peer, quickMessage)
+                    },
                     enabled = state == "idle"
                 ) {
                     Text("Send: \"$quickMessage\"")
                 }
 
                 var sendStatus by remember { mutableStateOf("") }
-                LaunchedEffect(textSent?.id) {
+                LaunchedEffect(textSent?.nonce) {
                     val ev = textSent
                     if (ev != null) {
                         sendStatus = if (ev.queued)
@@ -177,6 +187,7 @@ class MainActivity : ComponentActivity() {
                 .getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE
             requestBatteryExemption()
         })
+        if (showHistory && svc != null) HistoryDialog(svc.history) { showHistory = false }
     }
 
     @Composable
@@ -232,6 +243,53 @@ class MainActivity : ComponentActivity() {
                     }
                     OutlinedTextField(quickMsg, { quickMsg = it },
                         label = { Text("Quick message") }, singleLine = true)
+                }
+            })
+    }
+
+    @Composable
+    private fun HistoryDialog(history: MessageHistory, onDone: () -> Unit) {
+        val entries by history.history.collectAsStateWithLifecycle()
+        // English-only, like the rest of the Android app so far (see
+        // docs/ANDROID.md) -- Locale.US pinned deliberately, not the
+        // device locale, so month names don't vary unexpectedly.
+        val fmt = remember { SimpleDateFormat("MMM d hh:mm a", Locale.US) }
+
+        AlertDialog(
+            onDismissRequest = onDone,
+            confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
+            title = { Text("Message history") },
+            text = {
+                if (entries.isEmpty()) {
+                    Text("No messages yet.")
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                        items(entries, key = { it.direction.name + it.id }) { e ->
+                            Column(Modifier.padding(vertical = 6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        if (e.direction == MessageHistory.Direction.SENT)
+                                            "You" else e.peer,
+                                        fontWeight = FontWeight.Bold, fontSize = 13.sp
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(fmt.format(Date(e.timestampMs)),
+                                        fontSize = 11.sp, color = Color.Gray)
+                                    // Single checkmark, sent side only: none
+                                    // yet = not confirmed delivered; check =
+                                    // the peer's client has processed it.
+                                    // No read-receipt distinction (v1 scope).
+                                    if (e.direction == MessageHistory.Direction.SENT
+                                        && e.status == MessageHistory.Status.DELIVERED) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("✓", color = Color(0xFF4CAF50),
+                                            fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Text(e.message, fontSize = 14.sp)
+                            }
+                        }
+                    }
                 }
             })
     }

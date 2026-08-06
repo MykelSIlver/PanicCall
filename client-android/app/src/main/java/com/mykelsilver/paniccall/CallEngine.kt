@@ -45,22 +45,29 @@ class CallEngine {
     val incomingCall = MutableStateFlow<String?>(null)
 
     /**
-     * `id` exists purely so two consecutive IDENTICAL messages from the
-     * same peer still produce distinct values -- StateFlow only notifies
-     * collectors when the value actually *changes*, so without a nonce a
-     * repeated "call me on MeshChat" in a row would silently not
-     * re-trigger the notification on the second send.
+     * `nonce` exists purely so two consecutive IDENTICAL messages from the
+     * same peer still produce distinct StateFlow values -- StateFlow only
+     * notifies collectors when the value actually *changes*, so without a
+     * nonce a repeated "call me on MeshChat" in a row would silently not
+     * re-trigger the notification on the second send. `msgId` is the real
+     * protocol id (see docs/PROTOCOL.md) -- used to correlate this event
+     * to the right row in local message history, and to send back
+     * text_delivered with the correct id.
      */
-    data class TextEvent(val from: String, val message: String, val id: Long)
+    data class TextEvent(val msgId: String, val from: String, val message: String, val nonce: Long)
     val textReceived = MutableStateFlow<TextEvent?>(null)
     private var textEventCounter = 0L
 
     /** Feedback for our own sendText(): delivered vs queued. Same nonce
-     * reasoning as TextEvent -- sending the same offline "queued=true"
-     * twice in a row must still re-trigger the UI both times. */
-    data class TextSentEvent(val queued: Boolean, val id: Long)
+     * reasoning as TextEvent. */
+    data class TextSentEvent(val msgId: String, val queued: Boolean, val nonce: Long)
     val textSent = MutableStateFlow<TextSentEvent?>(null)
     private var textSentCounter = 0L
+
+    /** The peer's client has processed our text -- the single checkmark. */
+    data class TextDeliveredEvent(val msgId: String, val nonce: Long)
+    val textDelivered = MutableStateFlow<TextDeliveredEvent?>(null)
+    private var textDeliveredCounter = 0L
 
     var onCallSetupMeasured: ((Long) -> Unit)? = null
 
@@ -110,9 +117,22 @@ class CallEngine {
 
     fun sendKeepalivePing() { ws?.send(Protocol.ping()) }
 
-    fun sendText(message: String) = main.post {
+    /**
+     * Returns the generated message id immediately (id generation has no
+     * thread affinity) so the caller can log a "pending" row in local
+     * history under the right id right away, without waiting for the
+     * actual send -- which still happens on the main looper, same as
+     * every other ws.send() in this class.
+     */
+    fun sendText(message: String): String {
         val trimmed = message.trim()
-        if (trimmed.isNotEmpty()) ws?.send(Protocol.text(trimmed))
+        val id = java.util.UUID.randomUUID().toString()
+        if (trimmed.isNotEmpty()) main.post { ws?.send(Protocol.text(id, trimmed)) }
+        return id
+    }
+
+    fun sendTextDelivered(id: String) = main.post {
+        ws?.send(Protocol.textDelivered(id))
     }
 
     fun shutdown() = main.post {
@@ -201,12 +221,18 @@ class CallEngine {
                 if (notifyPresence.value) playPresenceBlip(online = false)
             }
             "text" -> {
+                val msgId = o.optString("id")
                 val from = o.optString("from")
                 val message = o.optString("message")
-                textReceived.value = TextEvent(from, message, textEventCounter++)
+                textReceived.value = TextEvent(msgId, from, message, textEventCounter++)
             }
             "text_sent" -> {
-                textSent.value = TextSentEvent(o.optBoolean("queued"), textSentCounter++)
+                textSent.value = TextSentEvent(
+                    o.optString("id"), o.optBoolean("queued"), textSentCounter++)
+            }
+            "text_delivered" -> {
+                textDelivered.value =
+                    TextDeliveredEvent(o.optString("id"), textDeliveredCounter++)
             }
             "peer_name" -> o.optString("name").takeIf { it.isNotEmpty() }
                 ?.let { peerName.value = it }
