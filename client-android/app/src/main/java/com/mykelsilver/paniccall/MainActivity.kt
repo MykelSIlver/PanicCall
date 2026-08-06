@@ -250,6 +250,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun HistoryDialog(history: MessageHistory, onDone: () -> Unit) {
         val entries by history.history.collectAsStateWithLifecycle()
+        var showConfirmClear by remember { mutableStateOf(false) }
         // English-only, like the rest of the Android app so far (see
         // docs/ANDROID.md) -- Locale.US pinned deliberately, not the
         // device locale, so month names don't vary unexpectedly.
@@ -258,6 +259,10 @@ class MainActivity : ComponentActivity() {
         AlertDialog(
             onDismissRequest = onDone,
             confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
+            dismissButton = {
+                TextButton(onClick = { showConfirmClear = true },
+                    enabled = entries.isNotEmpty()) { Text("Clear") }
+            },
             title = { Text("Message history") },
             text = {
                 if (entries.isEmpty()) {
@@ -292,5 +297,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             })
+
+        if (showConfirmClear) {
+            AlertDialog(
+                onDismissRequest = { showConfirmClear = false },
+                title = { Text("Clear message history?") },
+                text = { Text("This only clears your own copy on this phone. "
+                        + "It cannot be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        history.clear()
+                        showConfirmClear = false
+                    }) { Text("Clear") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmClear = false }) { Text("Cancel") }
+                })
+        }
     }
 }

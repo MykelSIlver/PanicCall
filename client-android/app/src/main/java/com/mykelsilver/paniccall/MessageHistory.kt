@@ -62,6 +62,17 @@ class MessageHistory(context: Context) {
         history.value = entries.toList()
     }
 
+    /** Wipes local history -- this device only; the peer's own copy of
+     * what THEY sent/received is untouched (there is no shared history
+     * to begin with, see docs/PROTOCOL.md). Useful before handing the
+     * phone to someone else. */
+    @Synchronized
+    fun clear() {
+        entries.clear()
+        save()
+        history.value = emptyList()
+    }
+
     private fun trimAndPublish() {
         // A quick-message log, not an unbounded chat archive -- keep it
         // small on purpose, matching the feature's own scope.
