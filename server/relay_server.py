@@ -84,6 +84,37 @@ def load_pairs(path: Path) -> dict[str, Member]:
     return members
 
 
+def load_pending_state(path: Path, members: dict[str, Member]) -> int:
+    """Restore any pending texts written by save_pending_state() before a
+    prior shutdown/restart. Returns how many were restored. Missing file
+    (first run, or nothing was ever pending) is not an error."""
+    if not path.exists():
+        return 0
+    try:
+        data = json.loads(path.read_text())
+    except ValueError as e:
+        log.warning("pending-state file %s is corrupt, ignoring: %s", path, e)
+        return 0
+    restored = 0
+    for token, pending in data.items():
+        m = members.get(token)
+        if m is None:
+            continue                            # token removed since last run
+        m.pending_text = pending
+        restored += 1
+    return restored
+
+
+def save_pending_state(path: Path, members: dict[str, Member]) -> None:
+    """Atomic write (temp file + rename) so a crash/kill mid-write can
+    never leave a half-written, corrupt state file behind."""
+    data = {tok: m.pending_text for tok, m in members.items()
+            if m.pending_text is not None}
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+
 async def send_json(conn: ServerConnection, obj: dict) -> None:
     try:
         await conn.send(json.dumps(obj))
@@ -92,8 +123,9 @@ async def send_json(conn: ServerConnection, obj: dict) -> None:
 
 
 class Relay:
-    def __init__(self, members: dict[str, Member]):
+    def __init__(self, members: dict[str, Member], pending_path: Path):
         self.members = members
+        self.pending_path = pending_path
 
     async def handler(self, conn: ServerConnection) -> None:
         member = await self._handshake(conn)
@@ -183,10 +215,12 @@ class Relay:
             log.info("TEXT (queued) delivered to %s", member.display)
             await send_json(conn, {
                 "type": "text",
+                "id": member.pending_text.get("id", ""),
                 "from": member.pending_text["from"],
                 "message": member.pending_text["message"],
             })
             member.pending_text = None
+            save_pending_state(self.pending_path, self.members)
         return member
 
     def _lookup(self, token: str) -> Member | None:
@@ -251,23 +285,51 @@ class Relay:
                 if ch.isprintable())[:200].strip()
             if not raw_text:
                 return
+            # Client-generated id, forwarded unchanged so the sender can
+            # match a later text_sent/text_delivered ack to the right row
+            # in their own local history. Sanitized defensively even
+            # though it's just JSON -- a buggy client shouldn't be able
+            # to bloat the persisted pending-state file.
+            msg_id = "".join(
+                ch for ch in str(msg.get("id", ""))
+                if ch.isalnum() or ch in '-_')[:40]
             if peer_conn is None:
                 # No error here: the message is queued, not lost. A prior
                 # pending message (if any) is intentionally overwritten --
                 # only the latest canned message matters for this feature.
                 member.peer.pending_text = {
-                    "from": member.display, "message": raw_text,
+                    "id": msg_id, "from": member.display, "message": raw_text,
                 }
+                save_pending_state(self.pending_path, self.members)
                 log.info("TEXT %s -> %s (OFFLINE, queued): %.60s",
                          member.display, member.peer.display, raw_text)
-                await send_json(conn, {"type": "text_sent", "queued": True})
+                await send_json(conn, {
+                    "type": "text_sent", "id": msg_id, "queued": True,
+                })
             else:
                 log.info("TEXT %s -> %s: %.60s",
                          member.display, member.peer.display, raw_text)
                 await send_json(peer_conn, {
-                    "type": "text", "from": member.display, "message": raw_text,
+                    "type": "text", "id": msg_id,
+                    "from": member.display, "message": raw_text,
                 })
-                await send_json(conn, {"type": "text_sent", "queued": False})
+                await send_json(conn, {
+                    "type": "text_sent", "id": msg_id, "queued": False,
+                })
+        elif mtype == "text_delivered":
+            # Live relay only, not queued: if the original sender happens
+            # to be offline at this exact moment, the receipt is dropped
+            # and their local history simply keeps showing "sent" with no
+            # checkmark. A second queuing mechanism for receipts wasn't
+            # judged worth the complexity for a quick-message feature --
+            # see docs/PROTOCOL.md.
+            if peer_conn is not None:
+                msg_id = "".join(
+                    ch for ch in str(msg.get("id", ""))
+                    if ch.isalnum() or ch in '-_')[:40]
+                await send_json(peer_conn, {
+                    "type": "text_delivered", "id": msg_id,
+                })
         # unknown types: ignore (forward compatible)
 
 
@@ -276,6 +338,9 @@ async def main() -> None:
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--pairs", default="pairs.json", type=Path)
+    ap.add_argument("--pending-state", default="pending.json", type=Path,
+                    help="Where the queued-message-while-offline state "
+                         "survives a restart (needs a writable mount).")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -291,8 +356,12 @@ async def main() -> None:
     members = load_pairs(args.pairs)
     n_pairs = len({m.pair_id for m in members.values()})
     log.info("loaded %d pair(s), %d token(s)", n_pairs, len(members))
+    restored = load_pending_state(args.pending_state, members)
+    if restored:
+        log.info("restored %d pending message(s) from %s",
+                 restored, args.pending_state)
 
-    relay = Relay(members)
+    relay = Relay(members, args.pending_state)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

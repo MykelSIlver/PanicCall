@@ -10,8 +10,11 @@ import json
 import struct
 import secrets
 import sys
+import tempfile
+from pathlib import Path
 
 import websockets
+import relay_server as rs
 
 URI = "ws://127.0.0.1:8765"
 TOK_A = "aa" * 32
@@ -217,6 +220,25 @@ async def main():
           delivered.get("type") == "text" and delivered.get("from") == "Mickey"
           and delivered.get("message") == "second (should win)")
 
+    # 15. id round-trips end to end: sent -> text_sent ack -> received ->
+    # text_delivered back to the sender. Also proves a live-relayed text
+    # carries the same id the sender generated, and that text_delivered
+    # is a plain live relay (no queuing) that reaches the ORIGINAL sender.
+    await ws_a3.send(json.dumps(
+        {"type": "text", "id": "id-live-001", "message": "ping"}))
+    live_msg = await recv_json(ws_b3)
+    check("live text carries sender's id",
+          live_msg.get("type") == "text" and live_msg.get("id") == "id-live-001")
+    ack = await skip_to(ws_a3, "text_sent")
+    check("text_sent ack carries the same id", ack.get("id") == "id-live-001")
+
+    await ws_b3.send(json.dumps(
+        {"type": "text_delivered", "id": live_msg.get("id")}))
+    receipt = await skip_to(ws_a3, "text_delivered")
+    check("sender receives text_delivered with matching id",
+          receipt.get("type") == "text_delivered"
+          and receipt.get("id") == "id-live-001")
+
     await ws_a3.close()
     await ws_b3.close()
 
@@ -226,5 +248,52 @@ async def main():
         sys.exit(1)
     print("All tests passed.")
 
+
+def test_pending_state_persistence():
+    """load_pending_state/save_pending_state as pure functions -- no live
+    server needed. This is what makes the queued message survive a
+    container restart; test it in isolation from the network stack."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "pending.json"
+
+        # Missing file: not an error, restores nothing.
+        members = {"tok-a": rs.Member(token="tok-a", name="A", pair_id="p1")}
+        n = rs.load_pending_state(path, members)
+        check("missing pending-state file restores 0, no crash", n == 0)
+
+        # Round-trip: save, then load into a FRESH set of Member objects
+        # (simulating a real restart, where the old objects are gone).
+        members["tok-a"].pending_text = {"id": "abc123", "from": "Alice",
+                                         "message": "call me on MeshChat"}
+        rs.save_pending_state(path, members)
+        fresh = {"tok-a": rs.Member(token="tok-a", name="A", pair_id="p1"),
+                 "tok-b": rs.Member(token="tok-b", name="B", pair_id="p1")}
+        n = rs.load_pending_state(path, fresh)
+        check("pending state round-trips across a simulated restart",
+              n == 1 and fresh["tok-a"].pending_text is not None
+              and fresh["tok-a"].pending_text["message"] == "call me on MeshChat"
+              and fresh["tok-b"].pending_text is None)
+
+        # A token removed from pairs.json since the file was written
+        # (e.g. re-paired) must not crash the load.
+        only_b = {"tok-b": rs.Member(token="tok-b", name="B", pair_id="p1")}
+        n = rs.load_pending_state(path, only_b)
+        check("stale token in pending-state file is skipped, not fatal", n == 0)
+
+        # Corrupt file: warn and continue, never crash the relay's startup.
+        path.write_text("{not valid json")
+        n = rs.load_pending_state(path, fresh)
+        check("corrupt pending-state file is ignored, not fatal", n == 0)
+
+        # Clearing pending_text and saving again must remove it from disk,
+        # not leave a stale entry behind.
+        fresh["tok-a"].pending_text = None
+        rs.save_pending_state(path, fresh)
+        reloaded = json.loads(path.read_text())
+        check("clearing pending_text removes it from the saved file",
+              "tok-a" not in reloaded)
+
+
+test_pending_state_persistence()
 
 asyncio.run(main())
