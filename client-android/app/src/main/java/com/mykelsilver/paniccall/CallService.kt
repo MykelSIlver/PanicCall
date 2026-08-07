@@ -144,6 +144,7 @@ class CallService : LifecycleService() {
         engine.autoAnswer.value = p.getBoolean("autoAnswer", true)
         speakerOn.value = p.getBoolean("defaultSpeaker", true)
         engine.notifyPresence.value = p.getBoolean("notifyPresence", false)
+        engine.notifyTextReceived.value = p.getBoolean("notifyTextReceived", true)
         val url = p.getString("url", "") ?: ""
         val token = p.getString("token", "") ?: ""
         val name = p.getString("name", "") ?: ""

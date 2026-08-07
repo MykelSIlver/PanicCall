@@ -4,6 +4,14 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Message received sound</source>
+        <translation>Message received sound</translation>
+    </message>
+    <message>
+        <source>Short sound when a quick message arrives</source>
+        <translation>Short sound when a quick message arrives</translation>
+    </message>
+    <message>
         <source>History</source>
         <translation>History</translation>
     </message>

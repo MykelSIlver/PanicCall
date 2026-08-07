@@ -51,6 +51,11 @@ Page {
         defaultValue: false
     }
     ConfigurationValue {
+        id: cfgNotifyTextReceived
+        key: "/apps/harbour-paniccall/notifyTextReceived"
+        defaultValue: true
+    }
+    ConfigurationValue {
         id: cfgQuickMessage
         key: "/apps/harbour-paniccall/quickMessage"
         defaultValue: qsTr("Call me on MeshChat instead")
@@ -62,6 +67,7 @@ Page {
         if (!daemonMode) {
             callEngine.autoAnswer = cfgAutoAnswer.value
             callEngine.notifyPresence = cfgNotifyPresence.value
+            callEngine.notifyTextReceived = cfgNotifyTextReceived.value
             if (cfgToken.value !== "")
                 callEngine.configure(cfgUrl.value, cfgToken.value, cfgName.value)
         }
@@ -205,10 +211,12 @@ Page {
                 cfgName.value = nameField.text.trim()
                 cfgAutoAnswer.value = autoSwitch.checked
                 cfgNotifyPresence.value = presenceSwitch.checked
+                cfgNotifyTextReceived.value = textReceivedSwitch.checked
                 cfgQuickMessage.value = quickMessageField.text.trim()
                 if (!daemonMode) {
                     callEngine.autoAnswer = autoSwitch.checked
                     callEngine.notifyPresence = presenceSwitch.checked
+                    callEngine.notifyTextReceived = textReceivedSwitch.checked
                     callEngine.configure(urlField.text, tokenField.text.trim(),
                                          nameField.text.trim())
                 }
@@ -258,6 +266,12 @@ Page {
                         text: qsTr("Presence chirp")
                         description: qsTr("Short sound when your contact comes online or goes offline")
                         checked: cfgNotifyPresence.value
+                    }
+                    TextSwitch {
+                        id: textReceivedSwitch
+                        text: qsTr("Message received sound")
+                        description: qsTr("Short sound when a quick message arrives")
+                        checked: cfgNotifyTextReceived.value
                     }
                     TextField {
                         id: quickMessageField

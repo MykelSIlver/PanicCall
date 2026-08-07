@@ -39,6 +39,7 @@ class CallEngine : public QObject
     Q_PROPERTY(QString selfName READ selfName NOTIFY selfNameChanged)
     Q_PROPERTY(bool autoAnswer READ autoAnswer WRITE setAutoAnswer NOTIFY autoAnswerChanged)
     Q_PROPERTY(bool notifyPresence READ notifyPresence WRITE setNotifyPresence NOTIFY notifyPresenceChanged)
+    Q_PROPERTY(bool notifyTextReceived READ notifyTextReceived WRITE setNotifyTextReceived NOTIFY notifyTextReceivedChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(QObject *history READ historyObject CONSTANT)
 
@@ -54,6 +55,8 @@ public:
     void setAutoAnswer(bool on);
     bool notifyPresence() const { return m_notifyPresence; }
     void setNotifyPresence(bool on);
+    bool notifyTextReceived() const { return m_notifyTextReceived; }
+    void setNotifyTextReceived(bool on);
     QString lastError() const { return m_lastError; }
     QObject *historyObject() const { return const_cast<MessageHistory *>(&m_history); }
 
@@ -87,6 +90,7 @@ signals:
     void selfNameChanged();
     void autoAnswerChanged();
     void notifyPresenceChanged();
+    void notifyTextReceivedChanged();
     void lastErrorChanged();
     void incomingCall(const QString &from);
     void textReceived(const QString &id, const QString &from, const QString &message);
@@ -115,6 +119,7 @@ private:
     void stopRingtone();
     void advanceRingStep();   // timer-driven: steps freq/volume for the melody
     void playPresenceBlip(bool online);   // short one-shot chirp, no loop
+    void playTextReceivedBlip();          // same mechanism, third melody
     void advanceBlipStep();
     void sendJson(const QVariantMap &obj);
     static GstFlowReturn onNewSample(GstAppSink *sink, gpointer user);
@@ -146,13 +151,15 @@ private:
     QTimer      m_ringTimer;    // single-shot per step; re-armed with next duration
     int         m_ringStep;     // index into the melody step table
     bool        m_notifyPresence;
+    bool        m_notifyTextReceived;
 
     GstElement *m_blipPipe;     // short one-shot presence chirp (own pipe, no
     GstElement *m_blipSrc;      // loop -- plays the online/offline chirp once
     MessageHistory m_history;
     QTimer      m_blipTimer;    // then tears itself down)
     int         m_blipStep;
-    bool        m_blipIsOnline; // which of the two chirp tables is playing
+    enum class BlipKind { Online, Offline, TextReceived };
+    BlipKind    m_blipKind;      // which of the three chirp tables is playing
 };
 
 #endif // CALLENGINE_H

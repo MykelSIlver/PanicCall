@@ -4,6 +4,14 @@
 <context>
     <name>MainPage</name>
     <message>
+        <source>Message received sound</source>
+        <translation>Geluid bij ontvangen bericht</translation>
+    </message>
+    <message>
+        <source>Short sound when a quick message arrives</source>
+        <translation>Kort geluidje als er een snel bericht binnenkomt</translation>
+    </message>
+    <message>
         <source>History</source>
         <translation>Geschiedenis</translation>
     </message>

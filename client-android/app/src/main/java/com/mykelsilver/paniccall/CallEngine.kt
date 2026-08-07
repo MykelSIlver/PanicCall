@@ -39,6 +39,9 @@ class CallEngine {
 
     /** Off by default: short chirp when the peer comes online/offline. */
     val notifyPresence = MutableStateFlow(false)
+    /** On by default: unlike presence, a message is actual content you'd
+     * want to notice, not ambient status -- see the README discussion. */
+    val notifyTextReceived = MutableStateFlow(true)
     private var toneGen: ToneGenerator? = null
 
     /** Emits the caller's name on each incoming call (for notifications). */
@@ -225,6 +228,7 @@ class CallEngine {
                 val from = o.optString("from")
                 val message = o.optString("message")
                 textReceived.value = TextEvent(msgId, from, message, textEventCounter++)
+                if (notifyTextReceived.value) playTextReceivedTone()
             }
             "text_sent" -> {
                 textSent.value = TextSentEvent(
@@ -305,6 +309,32 @@ class CallEngine {
                 150)
         } catch (e: Exception) {
             Log.w(TAG, "presence blip failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Two identical beeps -- unlike the ACK/NACK pair above (which differ
+     * in pitch/character), this is meant to be tellable apart by ear at a
+     * glance. Same ToneGenerator instance, no Context needed, same
+     * reasoning as playPresenceBlip(). The gap between beeps uses this
+     * class's existing Handler-based delay pattern (see connect()'s
+     * postDelayed reconnect), not coroutines -- no coroutine scope exists
+     * in this class otherwise, and one beep-gap isn't reason to add one.
+     */
+    private fun playTextReceivedTone() {
+        try {
+            val tg = toneGen ?: ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
+                .also { toneGen = it }
+            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+            main.postDelayed({
+                try {
+                    tg.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+                } catch (e: Exception) {
+                    Log.w(TAG, "text-received tone (2nd beep) failed: ${e.message}")
+                }
+            }, 160)
+        } catch (e: Exception) {
+            Log.w(TAG, "text-received tone failed: ${e.message}")
         }
     }
 }

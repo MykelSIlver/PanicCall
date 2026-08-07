@@ -199,6 +199,9 @@ class MainActivity : ComponentActivity() {
         var auto by remember { mutableStateOf(p.getBoolean("autoAnswer", true)) }
         var speaker by remember { mutableStateOf(p.getBoolean("defaultSpeaker", true)) }
         var presence by remember { mutableStateOf(p.getBoolean("notifyPresence", false)) }
+        var textReceivedSound by remember {
+            mutableStateOf(p.getBoolean("notifyTextReceived", true))
+        }
         var quickMsg by remember {
             mutableStateOf(p.getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE)
         }
@@ -213,6 +216,7 @@ class MainActivity : ComponentActivity() {
                         .putBoolean("autoAnswer", auto)
                         .putBoolean("defaultSpeaker", speaker)
                         .putBoolean("notifyPresence", presence)
+                        .putBoolean("notifyTextReceived", textReceivedSound)
                         .putString("quickMessage", quickMsg.trim().take(200)).apply()
                     onDone()
                 }) { Text("Save") }
@@ -240,6 +244,11 @@ class MainActivity : ComponentActivity() {
                         Switch(presence, { presence = it })
                         Spacer(Modifier.width(8.dp))
                         Text("Presence chirp (contact online/offline)")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(textReceivedSound, { textReceivedSound = it })
+                        Spacer(Modifier.width(8.dp))
+                        Text("Message received sound")
                     }
                     OutlinedTextField(quickMsg, { quickMsg = it },
                         label = { Text("Quick message") }, singleLine = true)

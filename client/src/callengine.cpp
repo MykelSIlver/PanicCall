@@ -44,6 +44,11 @@ const int kRingSteps = sizeof(kRingMelody) / sizeof(kRingMelody[0]);
 struct BlipStep { double freq; double volume; int ms; };
 const BlipStep kOnlineBlip[]  = { {700, 0.4, 55}, {1000, 0.4, 70} };  // rising
 const BlipStep kOfflineBlip[] = { {1000, 0.4, 55}, {700, 0.4, 70} }; // falling
+// Two beeps at the SAME pitch, unlike the online/offline glides -- meant
+// to be tellable apart by ear at a glance (well, an earshot).
+const BlipStep kTextReceivedBlip[] = {
+    {1200, 0.4, 60}, {1200, 0.0, 40}, {1200, 0.4, 60},
+};
 }
 
 CallEngine::CallEngine(QObject *parent)
@@ -63,10 +68,11 @@ CallEngine::CallEngine(QObject *parent)
     , m_ringSrc(nullptr)
     , m_ringStep(0)
     , m_notifyPresence(false)
+    , m_notifyTextReceived(true)
     , m_blipPipe(nullptr)
     , m_blipSrc(nullptr)
     , m_blipStep(0)
-    , m_blipIsOnline(false)
+    , m_blipKind(BlipKind::Online)
 {
     connect(&m_ws, &QWebSocket::connected, this, &CallEngine::onConnected);
     connect(&m_ws, &QWebSocket::disconnected, this, &CallEngine::onDisconnected);
@@ -113,6 +119,14 @@ void CallEngine::setNotifyPresence(bool on)
         return;
     m_notifyPresence = on;
     emit notifyPresenceChanged();
+}
+
+void CallEngine::setNotifyTextReceived(bool on)
+{
+    if (m_notifyTextReceived == on)
+        return;
+    m_notifyTextReceived = on;
+    emit notifyTextReceivedChanged();
 }
 
 void CallEngine::configure(const QString &url, const QString &token,
@@ -263,6 +277,8 @@ void CallEngine::onTextMessage(const QString &msg)
         const QString msg = o.value(QStringLiteral("message")).toString();
         m_history.addReceived(id, from, msg);
         emit textReceived(id, from, msg);
+        if (m_notifyTextReceived)
+            playTextReceivedBlip();
 #ifdef HAVE_NOTIFICATIONS
         // A system notification (not just an in-page label) so this is
         // seen whether the UI is foregrounded or not -- same reasoning as
@@ -582,7 +598,39 @@ void CallEngine::playPresenceBlip(bool online)
         return;
     }
     m_blipSrc = gst_bin_get_by_name(GST_BIN(m_blipPipe), "blip");
-    m_blipIsOnline = online;
+    m_blipKind = online ? BlipKind::Online : BlipKind::Offline;
+    m_blipStep = 0;
+    gst_element_set_state(m_blipPipe, GST_STATE_PLAYING);
+    advanceBlipStep();
+}
+
+void CallEngine::playTextReceivedBlip()
+{
+    // Same one-shot mechanism as playPresenceBlip -- see the comment
+    // above advanceBlipStep()'s table dispatch. Kept as a separate entry
+    // point (rather than overloading playPresenceBlip's bool) mainly for
+    // readability at call sites.
+    if (m_blipPipe) {
+        m_blipTimer.stop();
+        if (m_blipSrc) gst_object_unref(m_blipSrc);
+        gst_element_set_state(m_blipPipe, GST_STATE_NULL);
+        gst_object_unref(m_blipPipe);
+        m_blipPipe = nullptr;
+        m_blipSrc = nullptr;
+    }
+    GError *err = nullptr;
+    m_blipPipe = gst_parse_launch(
+        "audiotestsrc name=blip is-live=true wave=square volume=0.0"
+        " ! audioconvert ! audioresample ! pulsesink", &err);
+    if (!m_blipPipe || err) {
+        qWarning() << "paniccall: text-received blip pipeline failed:"
+                   << (err ? err->message : "?");
+        g_clear_error(&err);
+        m_blipPipe = nullptr;
+        return;
+    }
+    m_blipSrc = gst_bin_get_by_name(GST_BIN(m_blipPipe), "blip");
+    m_blipKind = BlipKind::TextReceived;
     m_blipStep = 0;
     gst_element_set_state(m_blipPipe, GST_STATE_PLAYING);
     advanceBlipStep();
@@ -592,10 +640,22 @@ void CallEngine::advanceBlipStep()
 {
     if (!m_blipSrc)
         return;
-    const BlipStep *table = m_blipIsOnline ? kOnlineBlip : kOfflineBlip;
-    const int len = m_blipIsOnline
-        ? int(sizeof(kOnlineBlip) / sizeof(kOnlineBlip[0]))
-        : int(sizeof(kOfflineBlip) / sizeof(kOfflineBlip[0]));
+    const BlipStep *table = nullptr;
+    int len = 0;
+    switch (m_blipKind) {
+    case BlipKind::Online:
+        table = kOnlineBlip;
+        len = int(sizeof(kOnlineBlip) / sizeof(kOnlineBlip[0]));
+        break;
+    case BlipKind::Offline:
+        table = kOfflineBlip;
+        len = int(sizeof(kOfflineBlip) / sizeof(kOfflineBlip[0]));
+        break;
+    case BlipKind::TextReceived:
+        table = kTextReceivedBlip;
+        len = int(sizeof(kTextReceivedBlip) / sizeof(kTextReceivedBlip[0]));
+        break;
+    }
     if (m_blipStep >= len) {                     // done: tear down, no loop
         gst_object_unref(m_blipSrc);
         m_blipSrc = nullptr;
