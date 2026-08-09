@@ -145,7 +145,7 @@ Page {
                     text: {
                         if (callEngine.state === "in_call") return qsTr("HANG UP")
                         if (callEngine.state === "ringing") return qsTr("ANSWER")
-                        if (callEngine.state === "idle" && !canCall)
+                        if (callEngine.state === "idle" && !bigButton.canCall)
                             return qsTr("%1 is offline").arg(callEngine.peerName !== ""
                                                              ? callEngine.peerName : "…")
                         return qsTr("CALL %1").arg(callEngine.peerName !== ""
