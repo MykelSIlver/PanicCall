@@ -4,6 +4,14 @@ import Sailfish.Silica 1.0
 Page {
     id: page
 
+    // SilicaListView has no remorseAction() -- that helper lives on
+    // ListItem, not on the views. Calling it threw a silent TypeError
+    // and the clear never ran. RemorsePopup is the documented way to
+    // get a remorse timer when the trigger is not a list item; it
+    // reparents itself to the enclosing Page on execute() and draws
+    // above the view, so its position in this file does not matter.
+    RemorsePopup { id: clearRemorse }
+
     SilicaListView {
         id: listView
         anchors.fill: parent
@@ -19,7 +27,7 @@ Page {
                 // a brief "undo" banner instead of a blocking confirm
                 // dialog. Only actually clears once the remorse timeout
                 // elapses without the user cancelling.
-                onClicked: listView.remorseAction(qsTr("Clearing history"),
+                onClicked: clearRemorse.execute(qsTr("Clearing history"),
                     function() { callEngine.history.clear() })
             }
         }
