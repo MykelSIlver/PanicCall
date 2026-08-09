@@ -13,6 +13,14 @@ PKGCONFIG += gstreamer-1.0 gstreamer-app-1.0
 # -devel package (install with:
 #   sfdk tools package-install <target> nemonotifications-qt5-devel
 # if this feature is silently missing at runtime).
+# System notifications for incoming text messages (works whether the UI is
+# foregrounded or not). Now a hard BuildRequires in rpm/harbour-paniccall.spec
+# (pkgconfig(nemonotifications-qt5)) -- a manual `sfdk tools package-install`
+# without a matching spec entry does not survive the next `sfdk build`,
+# which resets the target snapshot to match the spec's BuildRequires each
+# time. This packagesExist() guard is now effectively always true given
+# the BuildRequires above guarantees the package at build time; kept as a
+# harmless defensive fallback rather than removed.
 packagesExist(nemonotifications-qt5) {
     DEFINES += HAVE_NOTIFICATIONS
     PKGCONFIG += nemonotifications-qt5

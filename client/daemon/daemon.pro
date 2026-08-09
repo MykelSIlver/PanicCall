@@ -15,8 +15,9 @@ packagesExist(keepalive) {
     DEFINES += HAVE_KEEPALIVE
     PKGCONFIG += keepalive
 }
-# text-message notifications (callengine.cpp is shared with the app; see
-# harbour-paniccall.pro for the full comment)
+# text-message notifications (callengine.cpp is shared with the app; now
+# a hard BuildRequires in rpm/harbour-paniccall.spec -- see
+# harbour-paniccall.pro for the full comment on why)
 packagesExist(nemonotifications-qt5) {
     DEFINES += HAVE_NOTIFICATIONS
     PKGCONFIG += nemonotifications-qt5

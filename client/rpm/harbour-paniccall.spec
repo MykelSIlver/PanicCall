@@ -19,10 +19,20 @@ BuildRequires:  pkgconfig(gstreamer-1.0)
 BuildRequires:  pkgconfig(gstreamer-app-1.0)
 BuildRequires:  desktop-file-utils
 BuildRequires:  qt5-qttools-linguist
-# nemonotifications-qt5-devel is intentionally NOT a hard BuildRequires:
-# text-message notifications degrade to a log line if it's absent from
-# the target (see harbour-paniccall.pro). Install it for the real
-# feature: sfdk tools package-install <target> nemonotifications-qt5-devel
+# A genuine BuildRequires, not left soft/optional as originally planned:
+# `sfdk build` resets the target snapshot to match this file's
+# BuildRequires on every single build, so anything installed by hand via
+# `sfdk tools package-install` without also being listed here gets
+# silently discarded again at the next build -- that's exactly what
+# happened here (confirmed: qt5-qtwebsockets-devel, a real BuildRequires
+# below, gets auto-reinstalled every build; nemo-qml-plugin-
+# notifications-qt5-devel, installed by hand without a matching entry
+# here, did not survive one). The RPM package name differs from the
+# pkgconfig name (nemo-qml-plugin-notifications-qt5-devel vs.
+# pkgconfig(nemonotifications-qt5)) -- both were confirmed via
+# `sfdk tools exec <target> zypper se notification` /
+# `rpm -ql nemo-qml-plugin-notifications-qt5-devel`, not guessed.
+BuildRequires:  pkgconfig(nemonotifications-qt5)
 
 %description
 Walkie-talkie style panic call between two paired SailfishOS devices,
