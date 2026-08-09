@@ -59,6 +59,10 @@ public:
     void setNotifyTextReceived(bool on);
     QString lastError() const { return m_lastError; }
     QObject *historyObject() const { return const_cast<MessageHistory *>(&m_history); }
+    // Plain typed accessors for EngineAdaptor's C++ code (not QML-facing;
+    // QML uses the historyObject()-backed property above instead).
+    QVariantList historyEntries() const { return m_history.entries(); }
+    void clearHistory() { m_history.clear(); }
 
     // Connect (and stay connected, with backoff) to the relay.
     Q_INVOKABLE void configure(const QString &url, const QString &token,
@@ -91,6 +95,9 @@ signals:
     void autoAnswerChanged();
     void notifyPresenceChanged();
     void notifyTextReceivedChanged();
+    void historyChanged();   // forwards MessageHistory::entriesChanged(),
+                              // so EngineAdaptor never needs to know that
+                              // type exists at all
     void lastErrorChanged();
     void incomingCall(const QString &from);
     void textReceived(const QString &id, const QString &from, const QString &message);

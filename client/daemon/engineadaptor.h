@@ -26,6 +26,17 @@ public slots:
     void Answer();
     void Hangup();
     void SetAutoAnswer(bool on);
+    QString SendText(const QString &message);
+    QString History() const;    // JSON array, same shape MessageHistory
+                                 // produces -- kept to simple wire types
+                                 // (QString) like everything else here,
+                                 // rather than registering a D-Bus type
+                                 // for QVariantList/QVariantMap.
+    void ClearHistory();
+    bool NotifyPresence() const;
+    void SetNotifyPresence(bool on);
+    bool NotifyTextReceived() const;
+    void SetNotifyTextReceived(bool on);
 
     QString State() const;
     QString PeerName() const;
@@ -42,6 +53,12 @@ signals:
     void AutoAnswerChanged(bool on);
     void LastErrorChanged(const QString &error);
     void IncomingCall(const QString &from);
+    void TextReceived(const QString &id, const QString &from, const QString &message);
+    void TextSent(const QString &id, bool queued);
+    void TextDelivered(const QString &id);
+    void HistoryChanged();
+    void NotifyPresenceChanged(bool on);
+    void NotifyTextReceivedChanged(bool on);
 
 private:
     CallEngine *m_e;

@@ -58,6 +58,8 @@ int main(int argc, char *argv[])
     ConfigSource cfg;
     auto applyConfig = [&engine, &cfg]() {
         engine.setAutoAnswer(cfg.autoAnswer());
+        engine.setNotifyPresence(cfg.notifyPresence());
+        engine.setNotifyTextReceived(cfg.notifyTextReceived());
         if (!cfg.token().isEmpty() && !cfg.url().isEmpty())
             engine.configure(cfg.url(), cfg.token(), cfg.name());
         else

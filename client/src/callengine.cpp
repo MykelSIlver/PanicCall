@@ -90,6 +90,7 @@ CallEngine::CallEngine(QObject *parent)
     connect(&m_ringTimer, &QTimer::timeout, this, &CallEngine::advanceRingStep);
     m_blipTimer.setSingleShot(true);
     connect(&m_blipTimer, &QTimer::timeout, this, &CallEngine::advanceBlipStep);
+    connect(&m_history, &MessageHistory::entriesChanged, this, &CallEngine::historyChanged);
 }
 
 CallEngine::~CallEngine()

@@ -13,9 +13,12 @@ DaemonProxy::DaemonProxy(QObject *parent)
     : QObject(parent)
     , m_if(QLatin1String(kService), QLatin1String(kPath),
            QLatin1String(kIface), QDBusConnection::sessionBus())
+    , m_history(new HistoryProxy(&m_if, this))
     , m_state(QStringLiteral("disconnected"))
     , m_peerOnline(false)
     , m_autoAnswer(true)
+    , m_notifyPresence(false)
+    , m_notifyTextReceived(true)
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.connect(kService, kPath, kIface, "StateChanged",
@@ -28,10 +31,26 @@ DaemonProxy::DaemonProxy(QObject *parent)
                 this, SLOT(onPeerOnlineChanged(bool)));
     bus.connect(kService, kPath, kIface, "AutoAnswerChanged",
                 this, SLOT(onAutoAnswerChanged(bool)));
+    bus.connect(kService, kPath, kIface, "NotifyPresenceChanged",
+                this, SLOT(onNotifyPresenceChanged(bool)));
+    bus.connect(kService, kPath, kIface, "NotifyTextReceivedChanged",
+                this, SLOT(onNotifyTextReceivedChanged(bool)));
     bus.connect(kService, kPath, kIface, "LastErrorChanged",
                 this, SLOT(onLastErrorChanged(QString)));
     bus.connect(kService, kPath, kIface, "IncomingCall",
                 this, SLOT(onIncomingCall(QString)));
+    bus.connect(kService, kPath, kIface, "TextReceived",
+                this, SLOT(onTextReceived(QString,QString,QString)));
+    bus.connect(kService, kPath, kIface, "TextSent",
+                this, SLOT(onTextSent(QString,bool)));
+    bus.connect(kService, kPath, kIface, "TextDelivered",
+                this, SLOT(onTextDelivered(QString)));
+    // HistoryProxy refreshes itself whenever the daemon's own history
+    // changes -- connected straight to it, not routed through a
+    // DaemonProxy slot, since there is nothing else to do with this
+    // signal here.
+    bus.connect(kService, kPath, kIface, "HistoryChanged",
+                m_history, SLOT(refresh()));
 
     // Initial snapshot so the UI opens with live values.
     QDBusReply<QString> s = m_if.call(QStringLiteral("State"));
@@ -44,6 +63,10 @@ DaemonProxy::DaemonProxy(QObject *parent)
     if (po.isValid()) onPeerOnlineChanged(po.value());
     QDBusReply<bool> aa = m_if.call(QStringLiteral("AutoAnswer"));
     if (aa.isValid()) onAutoAnswerChanged(aa.value());
+    QDBusReply<bool> np = m_if.call(QStringLiteral("NotifyPresence"));
+    if (np.isValid()) onNotifyPresenceChanged(np.value());
+    QDBusReply<bool> ntr = m_if.call(QStringLiteral("NotifyTextReceived"));
+    if (ntr.isValid()) onNotifyTextReceivedChanged(ntr.value());
     QDBusReply<QString> le = m_if.call(QStringLiteral("LastError"));
     if (le.isValid()) onLastErrorChanged(le.value());
 }
@@ -51,6 +74,26 @@ DaemonProxy::DaemonProxy(QObject *parent)
 void DaemonProxy::setAutoAnswer(bool on)
 {
     m_if.call(QStringLiteral("SetAutoAnswer"), on);
+}
+
+void DaemonProxy::setNotifyPresence(bool on)
+{
+    m_if.call(QStringLiteral("SetNotifyPresence"), on);
+}
+
+void DaemonProxy::setNotifyTextReceived(bool on)
+{
+    m_if.call(QStringLiteral("SetNotifyTextReceived"), on);
+}
+
+QString DaemonProxy::sendText(const QString &message)
+{
+    // Synchronous, like every other m_if.call() in this class (e.g.
+    // startCall()/answer()/hangup()) -- consistent with the existing
+    // pattern, and a local session-bus round trip to our own daemon is
+    // fast enough that this hasn't needed to be async anywhere else here.
+    QDBusReply<QString> r = m_if.call(QStringLiteral("SendText"), message);
+    return r.isValid() ? r.value() : QString();
 }
 
 void DaemonProxy::configure(const QString &url, const QString &token,
@@ -98,6 +141,20 @@ void DaemonProxy::onAutoAnswerChanged(bool on)
     emit autoAnswerChanged();
 }
 
+void DaemonProxy::onNotifyPresenceChanged(bool on)
+{
+    if (m_notifyPresence == on) return;
+    m_notifyPresence = on;
+    emit notifyPresenceChanged();
+}
+
+void DaemonProxy::onNotifyTextReceivedChanged(bool on)
+{
+    if (m_notifyTextReceived == on) return;
+    m_notifyTextReceived = on;
+    emit notifyTextReceivedChanged();
+}
+
 void DaemonProxy::onLastErrorChanged(const QString &e)
 {
     if (m_lastError == e) return;
@@ -108,4 +165,20 @@ void DaemonProxy::onLastErrorChanged(const QString &e)
 void DaemonProxy::onIncomingCall(const QString &from)
 {
     emit incomingCall(from);
+}
+
+void DaemonProxy::onTextReceived(const QString &id, const QString &from,
+                                 const QString &message)
+{
+    emit textReceived(id, from, message);
+}
+
+void DaemonProxy::onTextSent(const QString &id, bool queued)
+{
+    emit textSent(id, queued);
+}
+
+void DaemonProxy::onTextDelivered(const QString &id)
+{
+    emit textDelivered(id);
 }
