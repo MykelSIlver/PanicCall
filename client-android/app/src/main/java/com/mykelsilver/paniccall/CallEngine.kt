@@ -74,6 +74,20 @@ class CallEngine {
 
     var onCallSetupMeasured: ((Long) -> Unit)? = null
 
+    /**
+     * Called synchronously just before AudioRecord is opened, so the host
+     * service can take on the `microphone` foreground-service type first
+     * (it runs as `specialUse` while merely holding the socket open, which
+     * is what lets it be started from a BOOT_COMPLETED receiver at all --
+     * see CallService.ensureCallCapable()).
+     *
+     * Returning false does not abort the attempt: the audio start is tried
+     * anyway and its existing catch turns a refusal into a normal
+     * lastError, which is strictly better than pre-emptively refusing to
+     * ring for a panic call. Null (no host) means "nothing to arrange".
+     */
+    var ensureMicrophoneAllowed: (() -> Boolean)? = null
+
     private val main = Handler(Looper.getMainLooper())
     private val client = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)      // WS-level keepalive
@@ -265,6 +279,10 @@ class CallEngine {
 
     private fun startAudio(): Boolean {
         if (audio != null) return true
+        if (ensureMicrophoneAllowed?.invoke() == false) {
+            Log.w(TAG, "starting audio without the microphone FGS type; " +
+                    "AudioRecord may be refused")
+        }
         return try {
             audio = AudioPipeline { frame -> ws?.send(frame.toByteString()) }
                 .also { it.start() }

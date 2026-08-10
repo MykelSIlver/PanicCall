@@ -48,6 +48,27 @@ class CallService : LifecycleService() {
     val engine = CallEngine()
     lateinit var history: MessageHistory   // Context-dependent; see onCreate()
 
+    /**
+     * Whether this foreground service currently carries the `microphone`
+     * type, i.e. whether it is allowed to open AudioRecord.
+     *
+     * The service has two modes. In STANDBY it only holds the relay
+     * WebSocket open, which needs no microphone at all, and runs as
+     * `specialUse` -- the one type a BOOT_COMPLETED receiver is allowed
+     * to start on Android 14/15+. Before a call it is promoted to
+     * `specialUse|microphone` and then stays there for the rest of the
+     * service's life; re-promoting on every call would just add another
+     * chance to be refused, and the type is a declared capability, not
+     * live microphone use (the privacy indicator follows AudioRecord,
+     * not this flag).
+     */
+    @Volatile var callCapable = false
+        private set
+
+    // Kept so ensureCallCapable() can re-post the same ongoing notification
+    // it would otherwise have to invent; startForeground() needs one.
+    private var ongoingText = "PanicCall standby"
+
     // Speakerphone control. Android routes VOICE_COMMUNICATION streams to
     // the earpiece by default (like a regular phone call, for privacy) —
     // wrong default for a panic/baby-monitor call, where being heard is
@@ -69,13 +90,13 @@ class CallService : LifecycleService() {
         audioManager = getSystemService(AudioManager::class.java)
         history = MessageHistory(this)
         createChannels()
-        val notif = ongoingNotification("PanicCall standby")
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIF_ONGOING, notif,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(NOTIF_ONGOING, notif)   // no FGS types before API 29
-        }
+        startForegroundInCurrentMode()
+
+        // CallEngine auto-answers from inside its own websocket handling,
+        // synchronously, before any StateFlow collector in this class gets
+        // a turn -- so the promotion has to hang off a direct hook rather
+        // than off engine.state, or it would always run too late.
+        engine.ensureMicrophoneAllowed = { ensureCallCapable() }
 
         applySettings()
 
@@ -135,6 +156,78 @@ class CallService : LifecycleService() {
                 Log.w(TAG, "METRIC alive uptime_s=${(System.currentTimeMillis() - t0) / 1000}" +
                         " state=${engine.state.value} reconnects=${engine.reconnects}")
             }
+        }
+    }
+
+    // ------------------------------------------------- foreground type ---
+
+    /**
+     * (Re)enters the foreground with the type set appropriate to the
+     * current [callCapable] mode. Calling startForeground() again on an
+     * already-foreground service is the only way to change its type.
+     *
+     * Below API 34 there is no specialUse type and no BOOT_COMPLETED type
+     * restriction either, so the service simply always carries the
+     * microphone type, exactly as it did before this split existed.
+     */
+    private fun startForegroundInCurrentMode() {
+        val notif = ongoingNotification(ongoingText)
+        when {
+            Build.VERSION.SDK_INT >= 34 -> {
+                val types = if (callCapable)
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                else
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                startForeground(NOTIF_ONGOING, notif, types)
+            }
+            Build.VERSION.SDK_INT >= 29 -> {
+                callCapable = true
+                startForeground(NOTIF_ONGOING, notif,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            }
+            else -> {
+                callCapable = true
+                startForeground(NOTIF_ONGOING, notif)   // no FGS types before API 29
+            }
+        }
+    }
+
+    /**
+     * Takes on the microphone foreground-service type so a call can open
+     * AudioRecord. Idempotent and safe to call from anywhere.
+     *
+     * Returns false when the system refused. That is an expected outcome,
+     * not a bug: "while-in-use" permissions such as RECORD_AUDIO may not
+     * be claimed by an app that is currently in the background, and the
+     * usual exemptions (including the battery-optimisation exemption this
+     * app asks for) explicitly do not cover that case. So the promotion
+     * is attempted at three moments, earliest first:
+     *
+     *   1. when the UI binds -- the app is visibly in the foreground then,
+     *      which is the case the platform is happiest with, and it covers
+     *      every normal launch;
+     *   2. when a call actually arrives, via the engine hook;
+     *   3. implicitly again at (1) after the user taps the full-screen
+     *      incoming-call notification, if (2) was refused.
+     *
+     * A refusal therefore costs auto-answer on a cold-booted phone that
+     * has not been opened since -- the call still rings, it just needs one
+     * tap. Quick messages and their notifications are unaffected either
+     * way: those need no microphone at all.
+     */
+    fun ensureCallCapable(): Boolean {
+        if (callCapable) return true
+        return try {
+            callCapable = true            // read by startForegroundInCurrentMode()
+            startForegroundInCurrentMode()
+            Log.w(TAG, "METRIC fgs_promote result=ok")
+            true
+        } catch (e: Exception) {
+            callCapable = false
+            Log.w(TAG, "METRIC fgs_promote result=refused " +
+                    "err=${e.javaClass.simpleName}: ${e.message}")
+            false
         }
     }
 
@@ -278,6 +371,7 @@ class CallService : LifecycleService() {
             .build()
 
     private fun notifyOngoing(text: String) {
+        ongoingText = text
         getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ONGOING, ongoingNotification(text))
     }

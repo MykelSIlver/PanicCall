@@ -42,7 +42,14 @@ class MainActivity : ComponentActivity() {
     private var service by mutableStateOf<CallService?>(null)
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(n: ComponentName, b: IBinder) {
-            service = (b as CallService.LocalBinder).service
+            val s = (b as CallService.LocalBinder).service
+            service = s
+            // The app is visibly in the foreground right now, which is the
+            // one moment the platform reliably allows claiming a
+            // "while-in-use" permission. If the service came up from the
+            // boot receiver it is still in specialUse-only standby mode,
+            // so this is what makes calls possible again after a reboot.
+            s.ensureCallCapable()
         }
         override fun onServiceDisconnected(n: ComponentName) { service = null }
     }
