@@ -17,6 +17,10 @@ an Android phone and a Sailfish device can call each other today.
   GStreamer side: 48 kHz mono, 24 kbit/s VOIP, 20 ms, inband FEC.
 - **MainActivity**: the one big Compose button + settings
   (SharedPreferences), thin client of the service.
+- **BootReceiver**: restarts `CallService` after a reboot or an app
+  update, so the app behaves like the Sailfish daemon rather than like
+  an app you have to remember to open. See "Starting at boot" below —
+  this is less trivial than it sounds.
 
 ## Setup on Ubuntu
 
@@ -40,10 +44,16 @@ an Android phone and a Sailfish device can call each other today.
 
 ## Devices & SDK levels
 
-`minSdk = 33` (Samsung S22 Ultra on Android 13). `compileSdk`/`targetSdk`
-are set to 36 — if Android Studio suggests a newer installed platform
-(e.g. for an Android 17 Pixel), bumping these two numbers is the only
-change needed.
+`minSdk = 26` — the practical floor, since `NotificationChannel`
+requires it. That covers a colleague's Android 12 phone with room to
+spare. `compileSdk`/`targetSdk` are set to 36; if Android Studio
+suggests a newer installed platform, bumping those two numbers is
+normally the only change needed.
+
+Note that `targetSdk` is not a formality here: several behaviours this
+app depends on are gated on it, in particular the restrictions on what
+a `BOOT_COMPLETED` receiver may start (see below). Raising it means
+re-running the boot test.
 
 ## First run
 
@@ -68,16 +78,143 @@ change needed.
    device) — pair an Android token with a Sailfish token and press the
    button. The relay does not know the difference.
 
-## The honest Android caveat
+## Starting at boot without the app being opened
 
-Android has no suspend problem like Sailfish, but it has a **policy**
-problem: since Android 12, background microphone access is restricted.
-Receiving and *hearing* the caller works unattended; whether the callee's
-microphone opens without a screen tap depends on OS version and OEM. The
-full-screen intent (tap = app in use = mic allowed) is the standard
-escape hatch. For the baby-monitor scenario (device charging, app
-visible) none of this applies. Measuring exactly where each of the three
-test devices draws this line is the point of the device matrix.
+This is the Android counterpart of the Sailfish systemd user-service
+autostart, and getting it working needed one non-obvious trick.
+
+### The problem
+
+`CallService` used to be started from exactly one place:
+`MainActivity.onCreate()`. That meant that after a reboot nothing ran
+until the user opened the app — no relay connection, no quick messages,
+no incoming calls. On Sailfish the daemon is up before you touch the
+device; on Android it was not.
+
+The obvious fix is a `BOOT_COMPLETED` broadcast receiver, and the
+obvious fix does not work. `CallService` declares the `microphone`
+foreground-service type, and **apps targeting Android 14 or higher may
+not launch a microphone foreground service from a `BOOT_COMPLETED`
+receiver** — the system throws `ForegroundServiceStartNotAllowedException`.
+Android 15 extends the same ban to `phoneCall`, `camera`, `dataSync` and
+`mediaPlayback`, so there is no convenient type to hide behind either
+(and `dataSync` additionally has a hard six-hour runtime limit).
+
+### The solution: two modes, one service
+
+The service now has two modes and switches between them by calling
+`startForeground()` again, which is the only way to change an existing
+foreground service's type.
+
+| Mode | FGS type | What it can do |
+| --- | --- | --- |
+| **Standby** | `specialUse` | Hold the relay WebSocket open, receive and post text notifications, keep local history |
+| **Call-capable** | `specialUse \| microphone` | All of the above, plus open `AudioRecord` for a call |
+
+Standby needs no microphone at all — it is just a socket — and
+`specialUse` is the one type a `BOOT_COMPLETED` receiver is still
+allowed to start. `BootReceiver` therefore brings the service up in
+standby, and `CallService.ensureCallCapable()` promotes it to
+call-capable later. Once promoted it stays promoted for the rest of the
+service's life: re-promoting per call would only add further chances of
+being refused, and the type is a *declared capability*, not live
+microphone use (the privacy indicator follows `AudioRecord`, not the
+FGS type).
+
+The manifest declares both types (`microphone|specialUse`) plus
+`FOREGROUND_SERVICE_SPECIAL_USE`, `RECEIVE_BOOT_COMPLETED`, and a
+`PROPERTY_SPECIAL_USE_FGS_SUBTYPE` explaining the use to the platform.
+
+### When the promotion is attempted
+
+Promotion may be refused: "while-in-use" permissions such as
+`RECORD_AUDIO` cannot be claimed by an app that is currently in the
+background, and the usual exemptions — including the
+battery-optimization exemption this app requests — explicitly do not
+cover that case. So it is attempted at three points, earliest first:
+
+1. **When the UI binds** (`MainActivity.onServiceConnected`). The app is
+   visibly in the foreground, which is the case the platform is
+   happiest with. Covers every normal launch.
+2. **When a call actually arrives**, via `CallEngine.ensureMicrophoneAllowed`.
+   This has to be a direct, synchronous hook rather than a collector on
+   `engine.state`: `CallEngine` auto-answers from inside its own
+   WebSocket handling, before any `StateFlow` collector in `CallService`
+   gets a turn, so a collector would always run too late.
+3. **Implicitly via (1) again** after the user taps the full-screen
+   incoming-call notification, if (2) was refused.
+
+A refusal costs exactly one thing: auto-answer on a cold-booted phone
+that has not been opened since. The call still rings; it needs one tap.
+**Quick messages and their notifications are unaffected either way** —
+they need no microphone.
+
+`BootReceiver` deliberately does nothing when no relay URL and token are
+configured: an ongoing notification for an app that cannot connect to
+anything is pure noise. It also listens for `MY_PACKAGE_REPLACED`, so
+the service returns by itself after an app update.
+
+### Measured result
+
+On a Samsung Galaxy S22 Ultra, after a real reboot with the app never
+opened:
+
+```
+METRIC boot_start action=android.intent.action.BOOT_COMPLETED
+state connecting
+METRIC fgs_promote result=ok
+state idle
+```
+
+The paired Sailfish device showed the phone as online without the app
+ever being launched. One honest loose end: the promotion fired at boot,
+and it is not clear from the code which of the three call sites
+triggered it that early — neither should run before the UI binds or a
+call arrives. Worth a wider `adb logcat | grep -i paniccall` (not
+`-s PanicCall`, which hides other tags) on the next reboot test.
+
+### Testing pitfalls
+
+Two things make this painful to test, both discovered the hard way:
+
+- **`BOOT_COMPLETED` is a protected broadcast.** `adb shell am broadcast
+  -a android.intent.action.BOOT_COMPLETED` fails with a `SecurityException`
+  on any retail device; only the system may send it. Google's own docs
+  mention the command, but it needs a rooted/eng build. Just reboot.
+- **`am force-stop` puts the app in the stopped state, and a reboot does
+  not clear it.** A stopped app receives no broadcasts at all until the
+  user launches it by hand — so a force-stop followed by a reboot tests
+  nothing. Check with
+  `adb shell dumpsys package com.mykelsilver.paniccall | grep -o "stopped=[a-z]*"`
+  before concluding anything.
+
+The `FGS_BOOT_COMPLETED_RESTRICTIONS` compat flag is not needed here:
+`targetSdk` is 36, so the restrictions already apply.
+
+## Why not push notifications (UnifiedPush / FCM)
+
+Considered and deliberately rejected. The persistent foreground service
+already delivers messages and calls with the app closed, so push would
+solve a problem this app does not have — and it would cost real things:
+
+- **It does not help with the background restrictions.** A push message
+  wakes the app in the background, where exactly the same
+  foreground-service rules apply. Worse, there is an asymmetry: a
+  high-priority *FCM* message is on Google's documented exemption list
+  from the background-start restrictions, and UnifiedPush cannot be. For
+  the call path — where the whole point is answering immediately — push
+  is strictly worse than the socket that is already open.
+- **It needs a second app on every device.** UnifiedPush works through a
+  user-installed *distributor* (ntfy, NextPush, …). That is one more
+  thing to install and configure, against the zero-cognitive-load brief.
+- **It breaks the relay's privacy design.** The relay would have to
+  store a push endpoint URL per device and POST to it. Today it keeps no
+  per-device state beyond a single in-flight pending message.
+
+FCM is rejected outright for the self-hosted, no-Google-account
+philosophy of the project. UnifiedPush stays a reasonable *fallback*
+option if measurement ever shows the socket dying in Doze — and then
+only as an extra wake channel for text messages, never for calls.
 
 ## Speaker routing
 
@@ -140,12 +277,55 @@ notification (a plain `StateFlow` only notifies on an actual value
 *change*, so without the id a repeat send would silently no-op the
 second time).
 
-## Skeleton status
+## Release builds and distribution
 
-Written blind against the SDK (no Android toolchain in the authoring
-environment): expect the first Android Studio sync/build to surface
-small fixable issues (an import, a deprecation, a Concentus API detail —
-the encoder/decoder construction may need `OpusEncoder.create(...)`
-style factory calls depending on the artifact version). The
-architecture, protocol layer and threading model are the load-bearing
-parts and match the proven Sailfish implementation.
+No Play Store: releases are signed APKs attached to GitHub Releases.
+
+Signing config lives in `client-android/key.properties`, which is
+excluded by `.gitignore` and holds the keystore path and password. The
+keystore itself lives outside the repo entirely. Without that file the
+release build simply produces an unsigned APK instead of failing, so a
+fresh clone stays buildable by anyone who only wants a debug build.
+
+```bash
+cd client-android
+./gradlew assembleRelease
+~/Android/Sdk/build-tools/35.0.0/apksigner verify --print-certs \
+    app/build/outputs/apk/release/app-release.apk   # expect CN=PanicCall
+```
+
+Two things that are easy to get wrong:
+
+- **Bump `versionCode` on every release.** Android detects updates by
+  `versionCode`, not by tag name or `versionName`. Releases v0.1.0
+  through v0.2.5 all shipped as `versionCode = 1`, which is why they
+  were indistinguishable to the system and to update tooling.
+- **`key.properties` is a Java properties file, not shell.** A backslash
+  in the password is an escape character and is silently swallowed,
+  producing a "keystore password was incorrect" failure even though the
+  same string works with `keytool` on the command line. Prefer a
+  password without backslashes.
+
+Distribution is via [Obtainium](https://github.com/ImranR98/Obtainium),
+pointed at the repository URL: it watches GitHub Releases and offers
+updates, which is the closest thing to an app store that does not
+involve an app store. Name the asset `paniccall-vX.Y.Z.apk` rather than
+`app-release.apk` so releases are distinguishable and Obtainium's asset
+matching has something to match on.
+
+Changing signing keys (for example moving off the debug keystore)
+requires uninstalling first on every device — Android refuses an update
+with a different signature — which also wipes local settings and message
+history on those devices. Say so in the release notes.
+
+## Status
+
+Tested working end to end on real hardware: a Google Pixel 8 Pro, a
+Samsung Galaxy S22 Ultra, and a colleague's Android 12 phone. Calls,
+auto-answer, quick messages, message history, speaker routing and
+start-at-boot all work, against both other Android devices and the
+SailfishOS client through the same relay.
+
+The app is still entirely English: unlike the Sailfish client (English
+source, Dutch translation), no `strings.xml`/i18n has been set up at
+all, and every user-facing string is hardcoded in Kotlin.

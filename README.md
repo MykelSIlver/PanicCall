@@ -89,6 +89,18 @@ clear through the whole chain in testing — but:
   the background service all work — the one thing to know is that the
   lock screen shows it running in the background, same as any app with
   an active foreground service.
+- **Android now starts at boot too, with no push service involved.** A
+  boot receiver brings the foreground service up after a reboot, so
+  quick messages and calls arrive with the app never opened — the same
+  behaviour the Sailfish daemon has always had. This needed a trick:
+  apps targeting Android 14+ may not start a *microphone* foreground
+  service from a boot receiver, so the service starts in a
+  `specialUse` standby mode that only holds the relay socket open, and
+  takes on the microphone type separately before a call. **No Firebase,
+  no UnifiedPush, no third-party push server** — the connection you
+  already have is the notification channel. The mechanism, the reasons
+  push was rejected, and the testing pitfalls are written up in
+  [docs/ANDROID.md](docs/ANDROID.md).
 
 If any of this excites rather than worries you: welcome.
 
@@ -132,15 +144,29 @@ Dutch translation included; more welcome). Press the button. Details, pitfalls a
 to test alone with an echo peer): [docs/CLIENT.md](docs/CLIENT.md) and
 [docs/TESTING.md](docs/TESTING.md).
 
+**Android client** — signed APKs are attached to
+[Releases](https://github.com/MykelSIlver/PanicCall/releases); no Play
+Store, no Google account. Install the APK, open the app once (a
+freshly installed Android app receives no boot broadcast until it has
+been launched by hand), enter relay URL + token + name, and grant the
+microphone and notification permissions plus the battery-optimization
+exemption. On Samsung devices also exclude it from "deep sleep" under
+Battery → Background usage limits, or the OS will stop it regardless of
+what the app asks for. After that it survives reboots on its own.
+Build instructions and the release process: [docs/ANDROID.md](docs/ANDROID.md).
+
 ## Roadmap
 
 Roughly in order:
 
-1. **Background wake-up** — skeleton built (see
-   [docs/DAEMON.md](docs/DAEMON.md)): systemd daemon owns the engine, UI
-   auto-switches to a D-Bus remote control, KeepAlive wired for device
-   builds, metrics in the journal. Remaining: real-device measuring
-   campaign (suspend survival, battery cost).
+1. **Background wake-up** — done on Android (boot receiver + a
+   two-mode foreground service, verified on real hardware; see
+   [docs/ANDROID.md](docs/ANDROID.md)). On Sailfish the skeleton is
+   built (see [docs/DAEMON.md](docs/DAEMON.md)): systemd daemon owns
+   the engine, UI auto-switches to a D-Bus remote control, KeepAlive
+   wired for device builds, metrics in the journal. Remaining there:
+   the real-device measuring campaign (suspend survival, battery cost),
+   once hardware arrives.
 2. **v2 contacts model** — one token per device, multiple peers per device,
    one button per contact on the caller side (proto 2).
 3. **Full jitter buffer** — clock-synced playback against the seq/
