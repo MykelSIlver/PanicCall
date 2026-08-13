@@ -104,6 +104,38 @@ clear through the whole chain in testing — but:
 
 If any of this excites rather than worries you: welcome.
 
+## "Is it listening to me?"
+
+On Android, PanicCall shows up under *Active apps* in the quick
+settings panel, with a running hours counter next to it. That is
+unavoidable for any app that keeps its own connection open instead of
+routing through Google's push infrastructure, and it understandably
+raises the question. You do not have to take the source code's word for
+it — three things are checkable from outside the app:
+
+**No microphone indicator when idle.** Since Android 12 the system
+paints a green dot in the status bar whenever an app actually opens the
+microphone. It is drawn by the OS, and no app can suppress it. Watch
+that dot while PanicCall sits in standby: it is not there. It appears
+when a call starts, and goes away when the call ends.
+
+**The manifest says the same thing.** In standby the service runs as
+`specialUse` — a foreground-service type that carries no microphone
+permission at all — and only takes on the `microphone` type just before
+a call. That is declared in `AndroidManifest.xml` and explained in
+[docs/ANDROID.md](docs/ANDROID.md); it is a design constraint the app
+cannot quietly work around, not a promise in a privacy policy.
+
+**The battery figures agree.** Something recording continuously would
+show it. Measured on a Google Pixel 8 Pro over a full discharge from
+100% to 30%, with the service running for days without interruption,
+PanicCall accounts for well under 1% of battery use. An open microphone
+does not cost that little.
+
+What the app does in standby is hold one WebSocket to *your* relay open
+and wait. That is the whole reason it is visible in that list: there is
+no third party doing the waiting on its behalf.
+
 ## Repository layout
 
 ```
