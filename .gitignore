@@ -17,6 +17,7 @@ client/moc_*.cpp
 client/Makefile
 client/harbour-paniccall
 client/.qmake.stash
+client/tools/sim_peer_drop.py
 
 # Android build artifacts
 client-android/.gradle/
