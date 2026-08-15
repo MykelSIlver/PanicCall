@@ -235,6 +235,18 @@ class CallEngine {
             }
             "peer_offline" -> {
                 peerOnline.value = false
+                // A peer that vanishes mid-call (dead battery, out of
+                // coverage, tunnel) ends the call. The relay keeps no call
+                // state of its own and drops audio for an absent peer, so
+                // there is nothing left to reconnect to: without this the
+                // call would sit in "in_call" forever with the microphone
+                // open, streaming into the void, and the state would go
+                // asymmetric the moment the peer reconnects (their welcome
+                // puts them back in "idle"). Same handling as the "hangup"
+                // branch below, minus sending a hangup nobody can hear.
+                stopAudio()
+                if (state.value == "in_call" || state.value == "ringing")
+                    setState("idle")
                 if (notifyPresence.value) playPresenceBlip(online = false)
             }
             "text" -> {
