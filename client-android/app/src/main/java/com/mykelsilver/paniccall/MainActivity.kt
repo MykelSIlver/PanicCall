@@ -305,10 +305,21 @@ class MainActivity : ComponentActivity() {
     private fun HistoryDialog(history: MessageHistory, onDone: () -> Unit) {
         val entries by history.history.collectAsStateWithLifecycle()
         var showConfirmClear by remember { mutableStateOf(false) }
+        var reply by remember { mutableStateOf("") }
         // English-only, like the rest of the Android app so far (see
         // docs/ANDROID.md) -- Locale.US pinned deliberately, not the
         // device locale, so month names don't vary unexpectedly.
         val fmt = remember { SimpleDateFormat("MMM d hh:mm a", Locale.US) }
+
+        // Sends whatever is in the reply field and clears it. No success
+        // feedback needed: sendText() adds the row to the local history
+        // straight away, so the message appears in the list above.
+        fun sendReply() {
+            val text = reply.trim()
+            if (text.isEmpty()) return
+            service?.engine?.sendText(text)
+            reply = ""
+        }
 
         AlertDialog(
             onDismissRequest = onDone,
@@ -319,35 +330,63 @@ class MainActivity : ComponentActivity() {
             },
             title = { Text("Message history") },
             text = {
-                if (entries.isEmpty()) {
-                    Text("No messages yet.")
-                } else {
-                    LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                        items(entries, key = { it.direction.name + it.id }) { e ->
-                            Column(Modifier.padding(vertical = 6.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        if (e.direction == MessageHistory.Direction.SENT)
-                                            "You" else e.peer,
-                                        fontWeight = FontWeight.Bold, fontSize = 13.sp
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(fmt.format(Date(e.timestampMs)),
-                                        fontSize = 11.sp, color = Color.Gray)
-                                    // Single checkmark, sent side only: none
-                                    // yet = not confirmed delivered; check =
-                                    // the peer's client has processed it.
-                                    // No read-receipt distinction (v1 scope).
-                                    if (e.direction == MessageHistory.Direction.SENT
-                                        && e.status == MessageHistory.Status.DELIVERED) {
+                Column {
+                    if (entries.isEmpty()) {
+                        Text("No messages yet.")
+                    } else {
+                        LazyColumn(Modifier.heightIn(max = 340.dp)) {
+                            items(entries, key = { it.direction.name + it.id }) { e ->
+                                Column(Modifier.padding(vertical = 6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            if (e.direction == MessageHistory.Direction.SENT)
+                                                "You" else e.peer,
+                                            fontWeight = FontWeight.Bold, fontSize = 13.sp
+                                        )
                                         Spacer(Modifier.width(6.dp))
-                                        Text("✓", color = Color(0xFF4CAF50),
-                                            fontWeight = FontWeight.Bold)
+                                        Text(fmt.format(Date(e.timestampMs)),
+                                            fontSize = 11.sp, color = Color.Gray)
+                                        // Single checkmark, sent side only: none
+                                        // yet = not confirmed delivered; check =
+                                        // the peer's client has processed it.
+                                        // No read-receipt distinction (v1 scope).
+                                        if (e.direction == MessageHistory.Direction.SENT
+                                            && e.status == MessageHistory.Status.DELIVERED) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("✓", color = Color(0xFF4CAF50),
+                                                fontWeight = FontWeight.Bold)
+                                        }
                                     }
+                                    Text(e.message, fontSize = 14.sp)
                                 }
-                                Text(e.message, fontSize = 14.sp)
                             }
                         }
+                    }
+
+                    // Ad-hoc reply. Deliberately here and not on the main
+                    // screen: that stays a panic button plus one canned
+                    // message, and this is where you already are when you
+                    // have just read something and want to answer it --
+                    // which is also where the message notification now
+                    // lands you. See "Where the reins were loosened" in
+                    // the README.
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = reply,
+                            // The engine trims and caps at 200 characters;
+                            // stop typing there rather than silently
+                            // dropping the tail.
+                            onValueChange = { if (it.length <= 200) reply = it },
+                            placeholder = { Text("Write a reply…") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            onClick = { sendReply() },
+                            enabled = reply.isNotBlank() && service != null
+                        ) { Text("Send") }
                     }
                 }
             })
