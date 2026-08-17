@@ -98,6 +98,41 @@ class CallService : LifecycleService() {
         // than off engine.state, or it would always run too late.
         engine.ensureMicrophoneAllowed = { ensureCallCapable() }
 
+        // Subscribe BEFORE applySettings() opens the websocket. The text
+        // flows are SharedFlows with replay = 0, so an event emitted while
+        // nobody is collecting is gone -- and the relay delivers its whole
+        // pending queue immediately after the hello handshake. With the
+        // old conflated StateFlows a late subscriber still saw the last
+        // value, which masked this ordering; it does not any more.
+        lifecycleScope.launch {
+            // collect, not collectLatest: every text event must be handled
+            // to completion. collectLatest would cancel a half-finished
+            // handler (history write + notification + ack) the moment the
+            // next message arrived -- the very burst this is here to
+            // survive. State updates below can still use collectLatest,
+            // where superseding really is the desired behaviour.
+            engine.textReceived.collect { event ->
+                postTextNotification(event.from, event.message)
+                history.addReceived(event.msgId, event.from, event.message)
+                // Ack back to the sender so their history can show the
+                // single checkmark. Not queued if they're offline right
+                // now (see docs/PROTOCOL.md) -- a known, accepted gap.
+                engine.sendTextDelivered(event.msgId)
+            }
+        }
+        lifecycleScope.launch {
+            engine.textSent.collect { event ->
+                history.markStatus(event.msgId,
+                    if (event.queued) MessageHistory.Status.QUEUED
+                    else MessageHistory.Status.SENT)
+            }
+        }
+        lifecycleScope.launch {
+            engine.textDelivered.collect { event ->
+                history.markStatus(event.msgId, MessageHistory.Status.DELIVERED)
+            }
+        }
+
         applySettings()
 
         lifecycleScope.launch {
@@ -111,31 +146,6 @@ class CallService : LifecycleService() {
                 // on answer/hangup/peer-hangup/disconnect -- one place, same
                 // "can't forget to stop it" guarantee as the Sailfish side.
                 if (s == "ringing") ringLoop()
-            }
-        }
-        lifecycleScope.launch {
-            engine.textReceived.collectLatest { event ->
-                if (event != null) {
-                    postTextNotification(event.from, event.message)
-                    history.addReceived(event.msgId, event.from, event.message)
-                    // Ack back to the sender so their history can show the
-                    // single checkmark. Not queued if they're offline right
-                    // now (see docs/PROTOCOL.md) -- a known, accepted gap.
-                    engine.sendTextDelivered(event.msgId)
-                }
-            }
-        }
-        lifecycleScope.launch {
-            engine.textSent.collectLatest { event ->
-                if (event != null) history.markStatus(event.msgId,
-                    if (event.queued) MessageHistory.Status.QUEUED
-                    else MessageHistory.Status.SENT)
-            }
-        }
-        lifecycleScope.launch {
-            engine.textDelivered.collectLatest { event ->
-                if (event != null)
-                    history.markStatus(event.msgId, MessageHistory.Status.DELIVERED)
             }
         }
         lifecycleScope.launch {

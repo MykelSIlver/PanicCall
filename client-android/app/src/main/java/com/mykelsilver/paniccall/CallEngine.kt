@@ -5,6 +5,7 @@ import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
@@ -48,29 +49,59 @@ class CallEngine {
     val incomingCall = MutableStateFlow<String?>(null)
 
     /**
-     * `nonce` exists purely so two consecutive IDENTICAL messages from the
-     * same peer still produce distinct StateFlow values -- StateFlow only
-     * notifies collectors when the value actually *changes*, so without a
-     * nonce a repeated "call me on MeshChat" in a row would silently not
-     * re-trigger the notification on the second send. `msgId` is the real
-     * protocol id (see docs/PROTOCOL.md) -- used to correlate this event
-     * to the right row in local message history, and to send back
-     * text_delivered with the correct id.
+     * One-shot text events.
+     *
+     * These are SharedFlows, not StateFlows, and that is load-bearing.
+     * StateFlow is *conflated*: if several values are set before the
+     * collector gets a turn, only the last survives. On Android that is a
+     * live race, not a theoretical one -- OkHttp's reader thread posts
+     * each frame to the main Looper, and the collector resumes on that
+     * same Looper, so two frames landing in the queue back to back means
+     * the first is overwritten before anyone reads it. Measured with
+     * kotlinx-coroutines on a shared single-threaded dispatcher: from 3
+     * simultaneous events onwards, losses every run; at 10 events, 8 or 9
+     * lost. The relay flushing a pending queue on reconnect (up to
+     * --max-pending messages back to back) is exactly that shape, and so
+     * is the burst of text_delivered acks it triggers in return.
+     *
+     * Losing one is silent and total: for textReceived the collector in
+     * CallService is the only thing that writes the history row, posts
+     * the notification AND sends the delivery ack, so a dropped event
+     * loses all three with nothing in the log.
+     *
+     * `extraBufferCapacity` gives tryEmit() somewhere to put events when
+     * the collector is behind; 64 is far more than any realistic burst.
+     * replay = 0 (the default) because these are events, not state -- a
+     * late subscriber must not be handed a stale message to re-notify
+     * about. The nonce fields the StateFlow version needed to distinguish
+     * two identical consecutive messages are gone: SharedFlow delivers
+     * every emission, equal or not.
+     *
+     * `msgId` is the real protocol id (see docs/PROTOCOL.md) -- used to
+     * correlate the event to the right row in local message history, and
+     * to send back text_delivered with the correct id.
      */
-    data class TextEvent(val msgId: String, val from: String, val message: String, val nonce: Long)
-    val textReceived = MutableStateFlow<TextEvent?>(null)
-    private var textEventCounter = 0L
+    data class TextEvent(val msgId: String, val from: String, val message: String)
+    val textReceived = MutableSharedFlow<TextEvent>(extraBufferCapacity = 64)
 
-    /** Feedback for our own sendText(): delivered vs queued. Same nonce
-     * reasoning as TextEvent. */
-    data class TextSentEvent(val msgId: String, val queued: Boolean, val nonce: Long)
-    val textSent = MutableStateFlow<TextSentEvent?>(null)
-    private var textSentCounter = 0L
+    /** Feedback for our own sendText(): delivered vs queued. */
+    data class TextSentEvent(val msgId: String, val queued: Boolean)
+    val textSent = MutableSharedFlow<TextSentEvent>(extraBufferCapacity = 64)
 
     /** The peer's client has processed our text -- the single checkmark. */
-    data class TextDeliveredEvent(val msgId: String, val nonce: Long)
-    val textDelivered = MutableStateFlow<TextDeliveredEvent?>(null)
-    private var textDeliveredCounter = 0L
+    data class TextDeliveredEvent(val msgId: String)
+    val textDelivered = MutableSharedFlow<TextDeliveredEvent>(extraBufferCapacity = 64)
+
+    /**
+     * tryEmit() cannot suspend, so it is safe to call from handleControl
+     * on the main Looper. It only fails if the buffer is genuinely full,
+     * which would mean 64 unread events -- worth a log line, because that
+     * is the one remaining way an event can be lost.
+     */
+    private fun <T> MutableSharedFlow<T>.emitEvent(what: String, value: T) {
+        if (!tryEmit(value))
+            Log.w(TAG, "event buffer full, DROPPED $what")
+    }
 
     var onCallSetupMeasured: ((Long) -> Unit)? = null
 
@@ -253,16 +284,19 @@ class CallEngine {
                 val msgId = o.optString("id")
                 val from = o.optString("from")
                 val message = o.optString("message")
-                textReceived.value = TextEvent(msgId, from, message, textEventCounter++)
+                textReceived.emitEvent("text $msgId",
+                    TextEvent(msgId, from, message))
                 if (notifyTextReceived.value) playTextReceivedTone()
             }
             "text_sent" -> {
-                textSent.value = TextSentEvent(
-                    o.optString("id"), o.optBoolean("queued"), textSentCounter++)
+                val id = o.optString("id")
+                textSent.emitEvent("text_sent $id",
+                    TextSentEvent(id, o.optBoolean("queued")))
             }
             "text_delivered" -> {
-                textDelivered.value =
-                    TextDeliveredEvent(o.optString("id"), textDeliveredCounter++)
+                val id = o.optString("id")
+                textDelivered.emitEvent("text_delivered $id",
+                    TextDeliveredEvent(id))
             }
             "peer_name" -> o.optString("name").takeIf { it.isNotEmpty() }
                 ?.let { peerName.value = it }
