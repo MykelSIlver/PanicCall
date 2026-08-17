@@ -39,6 +39,22 @@ private const val DEFAULT_QUICK_MESSAGE = "Call me on MeshChat instead"
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        /** Set by the quick-message notification: open the history screen
+         *  (where the message is, and where the reply field lives) rather
+         *  than just bringing the app up on the main screen. */
+        const val EXTRA_SHOW_HISTORY = "com.mykelsilver.paniccall.SHOW_HISTORY"
+    }
+
+    /**
+     * Lives on the Activity rather than in a remember{} inside the
+     * composable because two entry points outside composition need to set
+     * it: onCreate (cold start from the notification) and onNewIntent
+     * (the app was already running -- the common case, and the one that
+     * needs android:launchMode="singleTop" to be delivered at all).
+     */
+    private var showHistory by mutableStateOf(false)
+
     private var service by mutableStateOf<CallService?>(null)
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(n: ComponentName, b: IBinder) {
@@ -57,8 +73,28 @@ class MainActivity : ComponentActivity() {
     private val askPerms = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()) { }
 
+    /**
+     * Delivered when the notification is tapped while the app is already
+     * running. Only reached because MainActivity is launchMode="singleTop"
+     * and the PendingIntent carries FLAG_ACTIVITY_SINGLE_TOP: without
+     * both, Android simply brings the existing task to the front and this
+     * never fires, so the extra would work on a cold start and silently
+     * do nothing the rest of the time.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)          // so a later getIntent() sees this one
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_SHOW_HISTORY, false) == true)
+            showHistory = true
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
         askPerms.launch(arrayOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.POST_NOTIFICATIONS))
@@ -86,7 +122,6 @@ class MainActivity : ComponentActivity() {
     private fun Screen() {
         val svc = service
         var showSettings by remember { mutableStateOf(false) }
-        var showHistory by remember { mutableStateOf(false) }
         var quickMessage by remember {
             mutableStateOf(getSharedPreferences("paniccall", MODE_PRIVATE)
                 .getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE)

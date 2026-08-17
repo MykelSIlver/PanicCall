@@ -365,12 +365,50 @@ class CallService : LifecycleService() {
         })
         nm.createNotificationChannel(NotificationChannel(
             CH_TEXT, "Quick messages",
-            NotificationManager.IMPORTANCE_DEFAULT))
+            // HIGH, not DEFAULT: a heads-up banner that appears over
+            // whatever is on screen, so a message is noticed without the
+            // app taking the screen over the way an incoming call does.
+            // Deliberately NOT a full-screen intent -- that would make
+            // "on my way" look exactly like an emergency, which destroys
+            // the distinction the whole app is built around. Users who
+            // find this too loud can turn the channel down in Android's
+            // own notification settings; that is what channels are for.
+            NotificationManager.IMPORTANCE_HIGH))
     }
 
+    /**
+     * Intent for the ongoing/call notifications: just bring the app up.
+     *
+     * requestCode 0 is deliberate and must stay distinct from the one used
+     * by textContentIntent(). PendingIntent equality ignores *extras*, so
+     * two getActivity() calls sharing a request code and component hand
+     * back the same cached object -- the second one's extras would be
+     * silently thrown away.
+     */
     private fun contentIntent(): PendingIntent = PendingIntent.getActivity(
         this, 0, Intent(this, MainActivity::class.java),
         PendingIntent.FLAG_IMMUTABLE)
+
+    /**
+     * Intent for a quick-message notification: bring the app up AND open
+     * the message history, which is where the message you just got is,
+     * and where the reply field lives.
+     *
+     * FLAG_ACTIVITY_SINGLE_TOP together with android:launchMode="singleTop"
+     * in the manifest is what makes this work when the app is already
+     * running: without it the system just brings the existing task to the
+     * front and never delivers this intent, so the extra is only ever seen
+     * on a cold start -- the one case that matters least.
+     *
+     * FLAG_UPDATE_CURRENT so the extra in a cached PendingIntent is
+     * refreshed rather than reused.
+     */
+    private fun textContentIntent(): PendingIntent = PendingIntent.getActivity(
+        this, 1,
+        Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(MainActivity.EXTRA_SHOW_HISTORY, true),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
     private fun ongoingNotification(text: String): Notification =
         Notification.Builder(this, CH_ONGOING)
@@ -402,7 +440,7 @@ class CallService : LifecycleService() {
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle(from)
             .setContentText(message)
-            .setContentIntent(contentIntent())
+            .setContentIntent(textContentIntent())
             .setAutoCancel(true)
             .build()
         getSystemService(NotificationManager::class.java).notify(NOTIF_TEXT, n)
