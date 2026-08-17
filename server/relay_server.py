@@ -48,10 +48,12 @@ class Member:
     peer: "Member" = None                      # set after config load
     conn: ServerConnection = None              # live connection or None
     dropped_audio: int = field(default=0)      # frames dropped (peer offline)
-    pending_text: dict = field(default=None)   # one queued text ({"from","message"}),
-                                                # delivered on next reconnect; in-memory
-                                                # only (lost on relay restart -- fine for
-                                                # v1, see docs/PROTOCOL.md)
+    pending_texts: list = field(default_factory=list)
+    # Up to --max-pending queued texts ({"id","from","message"}), oldest
+    # first, delivered in order on the next reconnect. Durable: written to
+    # the --pending-state file on every change (see save_pending_state).
+    # Was a single message before v0.2.8; see load_pending_state for the
+    # migration.
 
 
 def load_pairs(path: Path) -> dict[str, Member]:
@@ -87,7 +89,12 @@ def load_pairs(path: Path) -> dict[str, Member]:
 def load_pending_state(path: Path, members: dict[str, Member]) -> int:
     """Restore any pending texts written by save_pending_state() before a
     prior shutdown/restart. Returns how many were restored. Missing file
-    (first run, or nothing was ever pending) is not an error."""
+    (first run, or nothing was ever pending) is not an error.
+
+    Accepts both the current format (token -> list of messages) and the
+    pre-v0.2.8 one (token -> single message object), so a relay upgraded
+    in place does not drop whatever was queued at the moment it stopped.
+    """
     if not path.exists():
         return 0
     try:
@@ -100,16 +107,22 @@ def load_pending_state(path: Path, members: dict[str, Member]) -> int:
         m = members.get(token)
         if m is None:
             continue                            # token removed since last run
-        m.pending_text = pending
-        restored += 1
+        if isinstance(pending, dict):           # pre-v0.2.8 single message
+            pending = [pending]
+        if not isinstance(pending, list):
+            log.warning("pending-state entry for %s… is malformed, skipping",
+                        token[:8])
+            continue
+        m.pending_texts = pending
+        restored += len(pending)
     return restored
 
 
 def save_pending_state(path: Path, members: dict[str, Member]) -> None:
     """Atomic write (temp file + rename) so a crash/kill mid-write can
     never leave a half-written, corrupt state file behind."""
-    data = {tok: m.pending_text for tok, m in members.items()
-            if m.pending_text is not None}
+    data = {tok: m.pending_texts for tok, m in members.items()
+            if m.pending_texts}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data))
     tmp.replace(path)
@@ -123,9 +136,11 @@ async def send_json(conn: ServerConnection, obj: dict) -> None:
 
 
 class Relay:
-    def __init__(self, members: dict[str, Member], pending_path: Path):
+    def __init__(self, members: dict[str, Member], pending_path: Path,
+                 max_pending: int = 5):
         self.members = members
         self.pending_path = pending_path
+        self.max_pending = max_pending
 
     async def handler(self, conn: ServerConnection) -> None:
         member = await self._handshake(conn)
@@ -209,17 +224,21 @@ class Relay:
             # keep the peer's UI current with our (possibly new) name
             await send_json(member.peer.conn,
                             {"type": "peer_name", "name": member.display})
-        if member.pending_text is not None:
+        if member.pending_texts:
             # Same "text" shape as a live relay -- the client needs no
             # special handling for a queued-then-delivered message.
-            log.info("TEXT (queued) delivered to %s", member.display)
-            await send_json(conn, {
-                "type": "text",
-                "id": member.pending_text.get("id", ""),
-                "from": member.pending_text["from"],
-                "message": member.pending_text["message"],
-            })
-            member.pending_text = None
+            # Oldest first, so they land in the receiver's history in the
+            # order they were sent.
+            log.info("TEXT (queued) delivering %d to %s",
+                     len(member.pending_texts), member.display)
+            for pending in member.pending_texts:
+                await send_json(conn, {
+                    "type": "text",
+                    "id": pending.get("id", ""),
+                    "from": pending["from"],
+                    "message": pending["message"],
+                })
+            member.pending_texts = []
             save_pending_state(self.pending_path, self.members)
         return member
 
@@ -294,15 +313,24 @@ class Relay:
                 ch for ch in str(msg.get("id", ""))
                 if ch.isalnum() or ch in '-_')[:40]
             if peer_conn is None:
-                # No error here: the message is queued, not lost. A prior
-                # pending message (if any) is intentionally overwritten --
-                # only the latest canned message matters for this feature.
-                member.peer.pending_text = {
+                # No error here: the message is queued, not lost. The queue
+                # is bounded; when it is full the OLDEST message is dropped,
+                # because if someone cannot read everything, the most recent
+                # messages are the ones that still matter.
+                q = member.peer.pending_texts
+                q.append({
                     "id": msg_id, "from": member.display, "message": raw_text,
-                }
+                })
+                dropped = 0
+                while len(q) > self.max_pending:
+                    q.pop(0)
+                    dropped += 1
                 save_pending_state(self.pending_path, self.members)
-                log.info("TEXT %s -> %s (OFFLINE, queued): %.60s",
-                         member.display, member.peer.display, raw_text)
+                log.info("TEXT %s -> %s (OFFLINE, queued %d/%d%s): %.60s",
+                         member.display, member.peer.display,
+                         len(q), self.max_pending,
+                         f", dropped {dropped} oldest" if dropped else "",
+                         raw_text)
                 await send_json(conn, {
                     "type": "text_sent", "id": msg_id, "queued": True,
                 })
@@ -341,7 +369,13 @@ async def main() -> None:
     ap.add_argument("--pending-state", default="pending.json", type=Path,
                     help="Where the queued-message-while-offline state "
                          "survives a restart (needs a writable mount).")
+    ap.add_argument("--max-pending", type=int, default=5, metavar="N",
+                    help="How many texts to hold per member while they are "
+                         "offline (default: 5). When full, the oldest is "
+                         "dropped. Use 1 for the pre-v0.2.8 behaviour.")
     args = ap.parse_args()
+    if args.max_pending < 1:
+        sys.exit("--max-pending must be at least 1")
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
@@ -361,7 +395,7 @@ async def main() -> None:
         log.info("restored %d pending message(s) from %s",
                  restored, args.pending_state)
 
-    relay = Relay(members, args.pending_state)
+    relay = Relay(members, args.pending_state, args.max_pending)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

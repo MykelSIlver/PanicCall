@@ -43,7 +43,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the real explanation and
 
 Beyond voice, either side can send one short canned message ("call me on
 MeshChat instead") with a single tap — no keyboard, same zero-cognitive-load
-philosophy as the call button itself. If the other person is offline, the
+philosophy as the call button itself. You can also type a free-text reply,
+but only from the message history screen, never from the main screen (see
+"Where the reins were loosened" below). If the other person is offline, the
 relay holds the message and delivers it the moment they reconnect; each
 device keeps its own local history of what it sent and received, with a
 checkmark once a sent message is confirmed delivered.
@@ -73,11 +75,12 @@ clear through the whole chain in testing — but:
   versioned (`proto`), so mismatched clients fail loudly instead of weirdly.
 - Tested on the SailfishOS 5.0 emulator and, so far, exactly zero real
   emergencies.
-- **Text messages are a nudge, not a chat.** One configurable canned
-  message per device, not free text — deliberately, see the
-  zero-cognitive-load philosophy above. Offline delivery is durable (a
-  relay restart won't lose a queued message), but the *delivery
-  receipt* itself isn't: if the sender happens to be offline at the
+- **Text messages are a nudge, not a chat.** The main screen offers one
+  configurable canned message per device and no keyboard — deliberately,
+  see the zero-cognitive-load philosophy above. Free text exists, but
+  only one screen deeper; see "Where the reins were loosened" below.
+  Offline delivery is durable (a relay restart won't lose queued
+  messages), but the *delivery receipt* itself isn't: if the sender happens to be offline at the
   exact moment their message arrives, the checkmark never comes, even
   though the message did. Sent/delivered only, no read receipts. Not
   encrypted either — same as everything else in v1.
@@ -135,6 +138,40 @@ does not cost that little.
 What the app does in standby is hold one WebSocket to *your* relay open
 and wait. That is the whole reason it is visible in that list: there is
 no third party doing the waiting on its behalf.
+
+## Where the reins were loosened
+
+Honesty about a deliberate exception to the philosophy above, because it
+is a real one.
+
+The zero-cognitive-load brief exists to protect one specific moment: a
+person in trouble reaching for their phone. That moment is the main
+screen — one big button, one canned message, no keyboard, no menus. That
+has not changed and is not going to.
+
+Replying to a message you have just read is not that moment. Nobody is
+panicking; they are looking at a screen and want to answer. Until
+v0.2.8, answering anything other than the canned text meant opening
+settings, overwriting the canned message, saving, going back, and
+sending — five steps to say "on my way", and it left the canned message
+changed for the next emergency. That is worse than a keyboard, not
+better.
+
+So the history screen now has a reply field. It is one screen deep, on
+the page you are already looking at when you read a message, and the
+main screen is untouched. The exception is the placement, and the
+placement is the point: capability where it costs nothing, restraint
+where it matters.
+
+One consequence worth stating plainly. A keyboard invites conversation,
+and this relay was never built to be a conversation server — it held
+exactly one pending message per person and overwrote it. Sending three
+messages to someone whose phone was off meant two of them silently
+disappeared. Since v0.2.8 the relay keeps a short queue instead
+(`--max-pending`, default 5, oldest dropped when full). That makes the
+common case work without pretending this is a messaging app: if you need
+a real conversation, PanicCall's own suggested canned message says it
+best — call the other person, or use something built for chatting.
 
 ## Repository layout
 

@@ -17,7 +17,59 @@ Page {
         anchors.fill: parent
         model: callEngine.history.entries
 
-        header: PageHeader { title: qsTr("Message history") }
+        header: Column {
+            id: replyHeader
+            width: listView.width
+
+            // Ad-hoc reply. Deliberately here and not on the main page:
+            // the main page stays a panic button plus one canned message,
+            // and this is where you already are when you have just read
+            // something and want to answer it.
+            //
+            // NOTE ON SCOPE: everything this needs lives inside this
+            // Column. An id declared in a ListView header is NOT visible
+            // from the enclosing Page -- a function on the Page calling
+            // replyField.text throws "ReferenceError: replyField is not
+            // defined" (verified against a real QQmlApplicationEngine;
+            // qmllint does not resolve scopes and will not catch it).
+            // The reverse direction is fine, which is why callEngine (a
+            // context property) resolves here without qualification.
+            function submit() {
+                var text = replyField.text.trim()
+                if (text === "")
+                    return
+                // No explicit success feedback needed: sendText() adds the
+                // row to the local history straight away, so the message
+                // shows up in the list below this field.
+                callEngine.sendText(text)
+                replyField.text = ""
+                replyField.focus = false
+            }
+
+            PageHeader { title: qsTr("Message history") }
+
+            TextField {
+                id: replyField
+                width: parent.width
+                placeholderText: qsTr("Write a reply…")
+                label: qsTr("Reply")
+                // The engine trims and caps at 200 characters; stop typing
+                // there rather than silently dropping the tail.
+                maximumLength: 200
+                EnterKey.enabled: text.trim() !== ""
+                EnterKey.iconSource: "image://theme/icon-m-enter-accept"
+                EnterKey.onClicked: replyHeader.submit()
+            }
+
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Send")
+                enabled: replyField.text.trim() !== ""
+                onClicked: replyHeader.submit()
+            }
+
+            Item { width: 1; height: Theme.paddingLarge }
+        }
 
         PullDownMenu {
             MenuItem {

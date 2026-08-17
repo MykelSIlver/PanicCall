@@ -173,6 +173,18 @@
         <translation>Clearing history</translation>
     </message>
     <message>
+        <source>Write a reply…</source>
+        <translation>Write a reply…</translation>
+    </message>
+    <message>
+        <source>Reply</source>
+        <translation>Reply</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Send</translation>
+    </message>
+    <message>
         <source>You</source>
         <translation>You</translation>
     </message>

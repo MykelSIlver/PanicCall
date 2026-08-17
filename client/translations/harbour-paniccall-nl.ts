@@ -173,6 +173,18 @@
         <translation>Geschiedenis wordt gewist</translation>
     </message>
     <message>
+        <source>Write a reply…</source>
+        <translation>Schrijf een antwoord…</translation>
+    </message>
+    <message>
+        <source>Reply</source>
+        <translation>Antwoord</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Verstuur</translation>
+    </message>
+    <message>
         <source>You</source>
         <translation>Jij</translation>
     </message>
