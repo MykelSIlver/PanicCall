@@ -27,8 +27,8 @@ android {
         minSdk = 26            // practical floor: NotificationChannel requires 26.
                                 // Covers Jo's Android 12 (API 31) with margin.
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.2.10"
+        versionCode = 31
+        versionName = "0.2.11"
     }
     buildFeatures { compose = true }
     signingConfigs {

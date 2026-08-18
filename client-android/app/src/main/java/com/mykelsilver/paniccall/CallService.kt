@@ -241,6 +241,29 @@ class CallService : LifecycleService() {
         }
     }
 
+    /**
+     * Sends a text AND records it in local history.
+     *
+     * Every UI send path must go through here rather than calling
+     * engine.sendText() directly. On Sailfish the engine owns its
+     * MessageHistory and records the row itself; on Android the history
+     * needs a Context, so it lives here on the service instead, and
+     * sending is therefore two steps that are easy to get half-right.
+     * That is exactly what happened in v0.2.10: the reply field on the
+     * history screen called engine.sendText() on its own, so replies went
+     * out over the wire but never appeared in history. One entry point
+     * means a future send path cannot forget the second half.
+     *
+     * Returns the message id, or "" if the message was blank and nothing
+     * was sent.
+     */
+    fun sendText(message: String): String {
+        val id = engine.sendText(message)
+        if (id.isNotEmpty())
+            history.addSent(id, engine.peerName.value, message.trim())
+        return id
+    }
+
     /** Re-read settings (called by the UI after the settings dialog). */
     fun applySettings() {
         val p = getSharedPreferences("paniccall", MODE_PRIVATE)

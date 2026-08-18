@@ -181,10 +181,7 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = {
-                        val id = svc.engine.sendText(quickMessage)
-                        svc.history.addSent(id, peer, quickMessage)
-                    },
+                    onClick = { svc.sendText(quickMessage) },
                     enabled = state == "idle"
                 ) {
                     Text("Send: \"$quickMessage\"")
@@ -311,13 +308,14 @@ class MainActivity : ComponentActivity() {
         // device locale, so month names don't vary unexpectedly.
         val fmt = remember { SimpleDateFormat("MMM d hh:mm a", Locale.US) }
 
-        // Sends whatever is in the reply field and clears it. No success
-        // feedback needed: sendText() adds the row to the local history
-        // straight away, so the message appears in the list above.
+        // Sends whatever is in the reply field and clears it. Goes through
+        // CallService.sendText(), which both sends AND records the row --
+        // engine.sendText() alone would put the message on the wire but
+        // leave nothing in history, which is what broke in v0.2.10.
         fun sendReply() {
             val text = reply.trim()
             if (text.isEmpty()) return
-            service?.engine?.sendText(text)
+            service?.sendText(text)
             reply = ""
         }
 

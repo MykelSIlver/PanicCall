@@ -174,8 +174,13 @@ class CallEngine {
      */
     fun sendText(message: String): String {
         val trimmed = message.trim()
+        // Empty in, empty out -- same contract as CallEngine::sendText on
+        // Sailfish. Returning a real id for a message that was never sent
+        // used to leave a phantom row in local history, stuck on PENDING
+        // forever because no ack could ever arrive for it.
+        if (trimmed.isEmpty()) return ""
         val id = java.util.UUID.randomUUID().toString()
-        if (trimmed.isNotEmpty()) main.post { ws?.send(Protocol.text(id, trimmed)) }
+        main.post { ws?.send(Protocol.text(id, trimmed)) }
         return id
     }
 
