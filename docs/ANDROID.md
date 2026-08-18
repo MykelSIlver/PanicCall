@@ -78,6 +78,32 @@ re-running the boot test.
    device) — pair an Android token with a Sailfish token and press the
    button. The relay does not know the difference.
 
+### Per-device checklist
+
+Four of these are not optional, and three of them are the platform
+fighting the app rather than anything the app can fix from code. Worth
+walking through on every phone this gets installed on, including other
+people's.
+
+- **Open the app once, by hand.** A freshly installed app sits in the
+  "stopped" state and receives no broadcasts at all — including
+  `BOOT_COMPLETED` — until the user launches it themselves. Without this
+  the boot autostart never fires, however correct the manifest is.
+- **Fill in relay URL, token and name.** `BootReceiver` deliberately
+  does nothing while the app is unconfigured.
+- **Grant microphone and notification permissions**, and the
+  battery-optimization exemption when prompted.
+- **Settings → Apps → PanicCall → Special access → Full-screen
+  notifications.** Not granted automatically to sideloaded builds; see
+  "Full-screen intents are denied" below. Without it an incoming call
+  arrives as a banner instead of taking over the screen.
+- **On Samsung:** Settings → Battery → Background usage limits — make
+  sure PanicCall is not in "Sleeping apps" or "Deep sleeping apps", and
+  set its battery usage to Unrestricted. One UI will otherwise stop the
+  service regardless of what the app asks for.
+- **On Samsung, if message banners never appear:** check Edge lighting
+  (see below) before suspecting the notification channel.
+
 ## Starting at boot without the app being opened
 
 This is the Android counterpart of the Sailfish systemd user-service
@@ -141,11 +167,17 @@ cover that case. So it is attempted at three points, earliest first:
    `engine.state`: `CallEngine` auto-answers from inside its own
    WebSocket handling, before any `StateFlow` collector in `CallService`
    gets a turn, so a collector would always run too late.
-3. **Implicitly via (1) again** after the user taps the full-screen
-   incoming-call notification, if (2) was refused.
+3. **Implicitly via (1) again** after the user taps the incoming-call
+   notification, if (2) did not give real microphone access.
 
-A refusal costs exactly one thing: auto-answer on a cold-booted phone
-that has not been opened since. The call still rings; it needs one tap.
+Point 2 is the weak one, and field testing showed why: at that moment
+the app is still in the background, and the platform refuses microphone
+access to a service promoted from there — silently, without
+`startForeground()` failing. See the next section. In practice that
+means auto-answer is dependable once the app has been opened at least
+once since boot, and should not be counted on before that. The call
+still rings; it needs one tap, which is itself point 3.
+
 **Quick messages and their notifications are unaffected either way** —
 they need no microphone.
 
@@ -154,24 +186,83 @@ configured: an ongoing notification for an app that cannot connect to
 anything is pure noise. It also listens for `MY_PACKAGE_REPLACED`, so
 the service returns by itself after an app update.
 
-### Measured result
+### Measured result, and what the promotion metric really means
 
 On a Samsung Galaxy S22 Ultra, after a real reboot with the app never
-opened:
+opened, the service comes up and connects:
 
 ```
-METRIC boot_start action=android.intent.action.BOOT_COMPLETED
-state connecting
-METRIC fgs_promote result=ok
-state idle
+ActivityManager: Start proc … for broadcast {…/.BootReceiver}
+ActivityManager: Background started FGS: Allowed … code:SYSTEM_ALLOW_LISTED
+PanicCall: METRIC boot_start action=android.intent.action.BOOT_COMPLETED
+ActivityManager: Foreground service started from background can not have
+                 location/camera/microphone access: service …/.CallService
+PanicCall: state connecting
+PanicCall: state idle
 ```
 
-The paired Sailfish device showed the phone as online without the app
-ever being launched. One honest loose end: the promotion fired at boot,
-and it is not clear from the code which of the three call sites
-triggered it that early — neither should run before the UI binds or a
-call arrives. Worth a wider `adb logcat | grep -i paniccall` (not
-`-s PanicCall`, which hides other tags) on the next reboot test.
+The paired Sailfish device shows the phone as online without the app
+ever being launched, and quick messages arrive. That part works.
+
+The fourth line is the important one, and it took a wide
+`adb logcat | grep -i paniccall` to find — with `-s PanicCall` it is
+invisible, because it is logged under `ActivityManager`, not by us.
+**Android decides separately whether a foreground service may use the
+microphone, and `startForeground()` succeeding is not that decision.**
+An earlier run of this same test logged `METRIC fgs_promote result=ok`
+while the system had already refused microphone access; the metric was
+measuring the wrong thing and reporting success it could not know about.
+
+There is no API to read the platform's verdict back. So since v0.2.12
+the metric reports only what is genuinely observable — whether the call
+threw, and whether the app was in the foreground at the time:
+
+```
+METRIC fgs_promote startForeground=ok appInForeground=false WARNING: promoted
+from background, the system may still refuse microphone access; …
+```
+
+Practical consequence: **auto-answer on a phone that has been rebooted
+and not opened since should not be relied on.** The call still rings and
+one tap answers it, which brings the app to the foreground and makes the
+promotion real. Quick messages and their notifications are unaffected —
+they need no microphone. When testing this, do not trust the metric
+alone: check whether audio actually flows.
+
+### Full-screen intents are denied for sideloaded builds
+
+Related, found in the same logs. The incoming-call notification asks for
+a full-screen intent so a call takes over the screen. On the S22 the
+system logged:
+
+```
+flags=AUTO_CANCEL|HIGH_PRIORITY|FSI_REQUESTED_BUT_DENIED
+```
+
+Since Android 14, `USE_FULL_SCREEN_INTENT` is only granted automatically
+to apps the platform recognises as calling or alarm apps, which in
+practice means apps installed through Google Play. A sideloaded APK
+declaring the permission does not get it, and the notification silently
+degrades to a heads-up banner.
+
+It is grantable per device: **Settings → Apps → PanicCall → Special
+access → Full-screen notifications**. Worth doing on every device this
+is installed on, and worth putting in the install checklist — without
+it, an emergency call arrives as a banner rather than taking over the
+screen.
+
+### Samsung: Edge Lighting eats heads-up banners
+
+Also visible in those logs:
+
+```
+InterruptionStateProvider: no Heads up : edgelighting enabled app
+```
+
+One UI replaces heads-up notification banners with edge lighting for
+apps that have it enabled. If a message notification does not appear as
+a banner on a Samsung device, check *Settings → Notifications → Advanced
+settings → Edge lighting* before suspecting the notification channel.
 
 ### Testing pitfalls
 
@@ -187,9 +278,46 @@ Two things make this painful to test, both discovered the hard way:
   nothing. Check with
   `adb shell dumpsys package com.mykelsilver.paniccall | grep -o "stopped=[a-z]*"`
   before concluding anything.
+- **Use `adb logcat | grep -i paniccall`, not `-s PanicCall`.** The
+  verdicts that actually matter here — the microphone refusal, the
+  full-screen-intent denial, Samsung's Edge Lighting — are all logged by
+  system components under their own tags. Filtering on our tag hides
+  precisely the lines worth reading.
 
 The `FGS_BOOT_COMPLETED_RESTRICTIONS` compat flag is not needed here:
 `targetSdk` is 36, so the restrictions already apply.
+
+## Websocket lifecycle: callbacks outlive the socket
+
+OkHttp keeps delivering `WebSocketListener` callbacks for a socket after
+`cancel()`, on a background thread, and `CallEngine.configure()` cancels
+the old socket and opens a new one in the same breath whenever settings
+change. Until v0.2.12 the callbacks did not check *which* socket they
+came from, so the dead socket's `onFailure` arrived a moment later,
+looked like a genuine disconnect, and scheduled a reconnect — leaving
+the app holding two live sockets on one token.
+
+The relay resolves that by evicting one with `CLOSE_REPLACED` (4003),
+which this client answers by reconnecting ("we fight back"), which
+evicts the other. Forever. The symptom was oddly specific: after
+changing the token in settings the app flapped online/offline roughly
+once a minute until it was force-stopped, and a reboot fixed it. A
+standalone Kotlin reproduction (`client/tools/ReconnectLoopTest.kt`)
+opened 26 sockets in two seconds without the guard, and settled at 2
+with it.
+
+Two rules follow, and they generalise beyond this one bug:
+
+- **Every listener callback checks `webSocket === ws` first.** Including
+  the binary one: a discarded socket must not be able to inject audio
+  into a live call.
+- **Drop the reference before cancelling** (`val old = ws; ws = null;
+  old?.cancel()`), so a socket being torn down can never briefly still
+  look like the current one.
+
+Fighting back on 4003 is correct behaviour when a genuine second device
+claims the token; it simply must not be triggered by a socket the app
+threw away itself.
 
 ## Why not push notifications (UnifiedPush / FCM)
 

@@ -1,266 +1,208 @@
-# PanicCall — field test sheet
+# PanicCall — manual field test sheet
 
-Covers everything changed recently that is not yet confirmed on real
-hardware. Complements `docs/TESTING.md` (which covers the automated
-server e2e and the echo-peer audio ladder); this sheet is manual,
-device-facing, and meant to be filled in and handed back.
+A reusable checklist for the device-facing tests that cannot be
+automated. Complements `TESTING.md`, which covers the automated server
+e2e and the echo-peer audio ladder.
+
+Copy this file, fill it in, keep it with the release notes — or just
+work through it and note anything that misbehaves.
 
 **How to fill in:** replace `[ ]` with `[x]` if it behaved as described,
 `[!]` if it did not, `[-]` if you skipped it. Add a short note after `→`
-when something is off. Then paste the whole file back.
+when something is off.
 
 ```
 Date:            ____________________
 Android version: v____________  device: ____________________
-Sailfish:        emulator / device (circle)  version: ____________
+Sailfish:        emulator / device       version: ____________
 Relay version:   ____________  --max-pending: ______
 ```
 
----
-
-## A. Android — sending and history
-
-Setup: both devices online unless stated otherwise.
-
-- [ ] **A1** Quick-message button (main screen) → message arrives on the
-  peer, AND a row appears in the Android history screen.
-  → 
-
-- [ ] **A2** Reply field (history screen) → message arrives on the peer,
-  AND a row appears in the Android history screen.
-  *(This is the v0.2.11 fix — it was broken in v0.2.10.)*
-  → 
-
-- [ ] **A3** Send three replies in a row from the history screen. All
-  three appear in history, in order, none missing.
-  → 
-
-- [ ] **A4** Type nothing / only spaces in the reply field. Send button
-  stays disabled; no phantom row appears in history.
-  → 
-
-- [ ] **A5** Peer OFFLINE: send a reply. Row appears in history marked
-  queued (no checkmark yet). Relay logs `queued N/M`.
-  → 
-
-- [ ] **A6** Bring the peer online. Message is delivered, and the
-  checkmark appears on the Android row.
-  → 
-
-- [ ] **A7** Text longer than 200 characters: the field stops accepting
-  input at 200 rather than silently truncating on send.
-  → 
-
-- [ ] **A8** Clear history on Android → list empties, and stays empty
-  after closing and reopening the app.
-  → 
+Before starting, check the per-device setup in `ANDROID.md` — several
+tests below fail for platform-policy reasons rather than bugs if the
+full-screen-notification permission or the Samsung battery settings are
+not right.
 
 ---
 
-## B. Android — the message burst (SharedFlow fix)
+## A. Sending and history (Android)
 
-The point of this section: before the fix, several messages arriving at
-once were silently lost. Set `--max-pending 20` on the relay for B1–B3,
-then put it back to 5.
+Both devices online unless stated otherwise.
 
-- [ ] **B1** Turn the Android device OFF (or force-stop). From Sailfish,
-  send 20 numbered messages (1…20). Turn Android back on.
-  Relay logs `TEXT (queued) delivering 20`.
-  **All 20 appear in the Android history.** Count them.
-  → how many arrived: ______
+- [ ] **A1** Quick-message button (main screen) → arrives on the peer,
+  AND a row appears in the Android history. →
 
-- [ ] **B2** Same again, but with the PanicCall app open in the
-  foreground when the messages land. Still all 20.
-  *(The foreground case was the most likely to lose events before.)*
-  → how many arrived: ______
+- [ ] **A2** Reply field (history screen) → arrives on the peer, AND a
+  row appears in the Android history. →
 
-- [ ] **B3** Same again, but sit on the history screen while they land.
-  All 20 appear, list updates live.
-  → how many arrived: ______
+- [ ] **A3** Three replies in a row: all three in history, in order. →
 
-- [ ] **B4** Reverse direction: Sailfish offline, send 5 replies from
-  Android, bring Sailfish online. All 5 arrive there, and **5
-  checkmarks** appear on the Android side.
-  *(The acks come back in a tight burst — the other conflation risk.)*
-  → checkmarks seen: ______
+- [ ] **A4** Empty / whitespace-only reply: Send stays disabled, no
+  phantom row appears. →
+
+- [ ] **A5** Peer OFFLINE: send a reply. Row appears marked queued (no
+  checkmark). Relay logs `queued N/M`. →
+
+- [ ] **A6** Bring the peer online: delivered, and the checkmark appears
+  on the Android row. →
+
+- [ ] **A7** Over 200 characters: the field stops accepting input rather
+  than truncating silently on send. →
+
+- [ ] **A8** Clear history → empties, and stays empty after closing and
+  reopening the app. →
 
 ---
 
-## C. Android — notifications
+## B. Message bursts
 
-- [ ] **C1** Message arrives while the app is closed → heads-up banner
-  appears over whatever is on screen (not just a silent status-bar
-  entry).
-  → 
+The relay flushing a pending queue on reconnect is the only way to
+produce a genuine burst — typing by hand is not fast enough, and does
+not exercise the same path. Set `--max-pending 20` for B1–B3, then put
+it back.
 
-- [ ] **C2** Tap the banner with the app CLOSED → app opens directly on
-  the history screen.
-  → 
+- [ ] **B1** Android device off (or in airplane mode). Send 20 numbered
+  messages from Sailfish. Bring Android back. Relay logs
+  `TEXT (queued) delivering 20`. All 20 in history.
+  → arrived: ______
 
-- [ ] **C3** Tap the banner with the app already running in the
-  BACKGROUND → lands on the history screen, not the main screen.
-  *(This is the case that needed `launchMode="singleTop"`.)*
-  → 
+- [ ] **B2** Same, but with the app open in the **foreground** as they
+  land (use airplane mode so the app can stay open). Still all 20.
+  → arrived: ______
 
-- [ ] **C4** Tap the banner with the app open on the MAIN screen →
-  switches to the history screen.
-  → 
+- [ ] **B3** Same, sitting on the history screen. All 20, list updates
+  live. → arrived: ______
 
-- [ ] **C5** After tapping, the notification disappears by itself
-  (`setAutoCancel`).
-  → 
+- [ ] **B4** Reverse: Sailfish offline, send 5 from Android, bring
+  Sailfish online. All 5 arrive there and **5 checkmarks** appear on the
+  Android side. → checkmarks: ______
+
+---
+
+## C. Notifications (Android)
+
+- [ ] **C1** Message while the app is closed → heads-up banner.
+  *(On Samsung, check Edge lighting first if no banner appears.)* →
+
+- [ ] **C2** Tap the banner, app CLOSED → opens on the history screen. →
+
+- [ ] **C3** Tap the banner, app in the BACKGROUND → history screen, not
+  the main screen. →
+
+- [ ] **C4** Tap the banner, app open on the MAIN screen → switches to
+  history. →
+
+- [ ] **C5** Notification clears itself after tapping. →
 
 - [ ] **C6** Several messages at once → one notification showing the
-  latest (this is expected, not a bug — confirm it is not stacking
-  20 separate notifications).
-  → 
+  latest (expected — not 20 stacked entries). →
+
+- [ ] **C7** Incoming call with full-screen-notification permission
+  GRANTED → takes over the screen. Without it, expect a banner only and
+  `FSI_REQUESTED_BUT_DENIED` in logcat. →
 
 ---
 
-## D. Android — service and boot
+## D. Service and boot (Android)
 
-- [ ] **D1** Reboot the phone, do NOT open the app. Sailfish shows the
-  Android device as online.
-  → 
+Do **not** `am force-stop` before these — that blocks all broadcasts
+until the app is opened by hand, and a reboot does not clear it.
 
-- [ ] **D2** Still without opening the app: send it a message from
-  Sailfish. Notification arrives.
-  → 
+- [ ] **D1** Reboot, do not open the app. Sailfish shows the phone
+  online. →
 
-- [ ] **D3** Still without opening the app: call it from Sailfish.
-  Check `adb logcat -s PanicCall` for `METRIC fgs_promote result=`.
-  → result was: `ok` / `refused` ______
+- [ ] **D2** Still unopened: send it a message. Notification arrives. →
 
-- [ ] **D4** During D1–D3, note which log lines appear at boot. Run the
-  wider `adb logcat | grep -i paniccall` rather than `-s PanicCall`.
-  *(Open question: `fgs_promote` fired at boot before either call site
-  should have run — this is the chance to see what triggers it.)*
-  → paste any surprising lines:
-  ```
-  
-  ```
+- [ ] **D3** Still unopened: call it. Watch
+  `adb logcat | grep -i paniccall` (wide, not `-s PanicCall`).
+  → `fgs_promote startForeground=` ______ `appInForeground=` ______
+  → did audio actually flow? ______
+  *(The metric alone does not prove microphone access — see ANDROID.md.)*
+
+- [ ] **D4** Open the app once, then call again. Audio works. →
+
+- [ ] **D5** Change the token in settings to another valid pair, save,
+  close the dialog. The app stays stably online — no flapping every
+  minute. *(Regression test for the v0.2.12 fix.)* →
 
 ---
 
 ## E. Sailfish
 
-- [ ] **E1** Reply field on the history screen: type and send → arrives
-  on Android, and a row appears in the Sailfish history.
-  → 
+- [ ] **E1** Reply field on the history screen: arrives on Android, and
+  a row appears in the Sailfish history. →
 
-- [ ] **E2** Reply field: Enter key on the virtual keyboard sends the
-  message (not just the Send button).
-  → 
+- [ ] **E2** Enter key on the virtual keyboard sends. →
 
-- [ ] **E3** The reply field scrolls into view above the virtual
-  keyboard when focused (it sits in the list header).
-  → 
+- [ ] **E3** The field scrolls into view above the keyboard when
+  focused. →
 
-- [ ] **E4** Send button is greyed out when the field is empty or only
-  spaces.
-  → 
+- [ ] **E4** Send is greyed out for empty / whitespace-only input. →
 
-- [ ] **E5** Dutch translation: with the device in Dutch, the field
-  shows "Schrijf een antwoord…" / "Antwoord" / "Verstuur".
-  → 
+- [ ] **E5** Dutch UI shows "Schrijf een antwoord…" / "Antwoord" /
+  "Verstuur". *(Not testable on the emulator — it offers no language
+  selection. Device only.)* →
 
-- [ ] **E6** Peer offline → the big button reads "<name> is offline"
-  rather than "CALL <name>".
-  *(The `canCall` scope fix; never confirmed on-screen.)*
-  → 
+- [ ] **E6** Peer offline → the big button reads "<name> is offline",
+  not "CALL <name>". →
 
-- [ ] **E7** Clear history still works (RemorsePopup counts down, list
-  empties, stays empty after restarting the app).
-  → 
+- [ ] **E7** Clear history: RemorsePopup counts down, list empties,
+  stays empty after restarting the app. →
 
 ---
 
-## F. Peer disappears mid-call (both directions)
+## F. Peer disappears mid-call
 
-Never tested on hardware. Fixed in both clients, but only proven in
-simulation.
+- [ ] **F1** Call Sailfish → Android, then power off the Android device
+  mid-call. Sailfish returns to idle by itself and shows the peer as
+  offline. Not stuck on "HANG UP". →
 
-- [ ] **F1** Call from Sailfish → Android. Mid-call, power off the
-  Android device. On Sailfish the call ends by itself: button returns to
-  idle and reads "<name> is offline". Not stuck on "HANG UP".
-  → 
+- [ ] **F2** Reverse: kill the Sailfish side mid-call, Android returns
+  to idle. →
 
-- [ ] **F2** Same, reversed: call from Android → Sailfish, kill the
-  Sailfish side mid-call. Android returns to idle.
-  → 
+- [ ] **F3** Microphone released afterwards — no green privacy dot, and
+  `docker logs` stops showing `DROP audio` within a second or two. →
 
-- [ ] **F3** After F1/F2, check that the microphone was released — no
-  green privacy dot on Android, and `docker logs` stops showing
-  `DROP audio` after a second or two.
-  → 
-
-- [ ] **F4** Milder variant: mid-call, turn wifi and mobile data off on
-  one device instead of powering down. Same recovery.
-  → 
+- [ ] **F4** Milder variant: turn wifi and mobile data off mid-call
+  instead of powering down. Same recovery. →
 
 ---
 
 ## G. Relay and tooling
 
-- [ ] **G1** `sudo python3 server/pending_tool.py` lists the queued
-  messages per member with names resolved from pairs.json.
-  → 
+- [ ] **G1** `sudo python3 server/pending_tool.py` lists queued messages
+  per member with names resolved from `pairs.json`. →
 
-- [ ] **G2** `--pair emulator-s22` limits output to that pair.
-  → 
+- [ ] **G2** `--pair <id>` limits output to that pair. →
 
 - [ ] **G3** `--clear` without `--i-stopped-the-relay` refuses and
-  explains why.
-  → 
+  explains why. →
 
-- [ ] **G4** Stop relay → `--clear --i-stopped-the-relay` → start relay.
-  Queue is genuinely empty (confirm by bringing an offline member online
-  and getting nothing).
-  → 
+- [ ] **G4** Stop relay → `--clear --i-stopped-the-relay` → start.
+  Queue genuinely empty (confirm by bringing an offline member online
+  and getting nothing). →
 
-- [ ] **G5** Queue durability: queue a few messages, then
-  `docker compose restart paniccall`. Relay logs
-  `restored N pending message(s)`, and the messages still arrive when
-  the member comes online.
-  → 
+- [ ] **G5** `docker compose restart paniccall` with messages queued →
+  logs `restored N pending message(s)`, and they still arrive. →
 
-- [ ] **G6** Hard kill: queue messages, `docker kill -s KILL paniccall`,
-  start again. Same result — nothing lost.
-  → 
+- [ ] **G6** `docker kill -s KILL paniccall`, then start → same, nothing
+  lost. →
 
 ---
 
-## H. Regression sweep (things that used to work)
+## H. Regression sweep
 
-Quick pass to catch anything the recent changes broke.
-
-- [ ] **H1** Call Sailfish → Android, audio both ways, hang up cleanly.
-  → 
-
-- [ ] **H2** Call Android → Sailfish, same.
-  → 
-
-- [ ] **H3** Auto-answer works on the receiving side.
-  → 
-
-- [ ] **H4** Speaker toggle on Android still switches earpiece/speaker
-  during a call.
-  → 
-
-- [ ] **H5** Presence chirp (if enabled) still fires when the peer goes
-  on/offline.
-  → 
-
+- [ ] **H1** Call Sailfish → Android, audio both ways, clean hangup. →
+- [ ] **H2** Call Android → Sailfish, same. →
+- [ ] **H3** Auto-answer works on the receiving side. →
+- [ ] **H4** Speaker toggle switches earpiece/speaker during a call. →
+- [ ] **H5** Presence chirp fires on peer online/offline (if enabled). →
 - [ ] **H6** Ringtone plays on incoming call and stops on
-  answer/hangup, both platforms.
-  → 
+  answer/hangup, both platforms. →
 
 ---
 
 ## Anything else
-
-Free text — anything odd, slow, ugly, or surprising that isn't covered
-above:
 
 ```
 
