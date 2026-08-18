@@ -145,7 +145,14 @@ class CallEngine {
         myName = n
         wantConnected = true
         backoffIdx = 0
-        ws?.cancel()
+        // Drop the reference before cancelling, so the old socket is
+        // already "not current" by the time its callbacks land -- see the
+        // isCurrent() guard in the listener. tryConnect() installs the
+        // replacement; if it declines (blank url) we correctly end up with
+        // no socket rather than a cancelled one masquerading as live.
+        val old = ws
+        ws = null
+        old?.cancel()
         tryConnect()
     }
 
@@ -191,7 +198,9 @@ class CallEngine {
     fun shutdown() = main.post {
         wantConnected = false
         stopAudio()
-        ws?.cancel()
+        val old = ws
+        ws = null
+        old?.cancel()
         setState("disconnected")
     }
 
@@ -213,26 +222,52 @@ class CallEngine {
     }
 
     private val listener = object : WebSocketListener() {
+        /**
+         * True only for the socket this engine currently considers live.
+         *
+         * OkHttp keeps delivering callbacks for a socket after cancel(),
+         * and configure() cancels the old socket and opens a new one in
+         * the same breath. Without this guard the dead socket's onFailure
+         * arrives a moment later, is mistaken for a real disconnect, and
+         * schedules a reconnect -- so the app ends up with TWO live
+         * sockets on the same token. The relay then evicts one with
+         * CLOSE_REPLACED (4003), which this client answers by
+         * reconnecting ("we fight back", see handleDisconnect), which
+         * evicts the other, forever. Symptom: after changing the token in
+         * settings the app flaps online/offline roughly once a minute
+         * until it is force-stopped.
+         *
+         * Fighting back on 4003 is right when a genuine second device
+         * shows up; it just must not be triggered by a socket we threw
+         * away ourselves.
+         */
+        private fun WebSocket.isCurrent() = this === ws
+
         override fun onOpen(webSocket: WebSocket, response: Response) {
             webSocket.send(Protocol.hello(token, myName))
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            main.post { handleControl(text) }
+            main.post { if (webSocket.isCurrent()) handleControl(text) }
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
             // Audio: decode straight on OkHttp's thread; the pipeline's
-            // player has its own thread-safe queue.
-            audio?.receive(bytes.toByteArray())
+            // player has its own thread-safe queue. Checked here too, so a
+            // discarded socket cannot inject audio into a live call.
+            if (webSocket === ws) audio?.receive(bytes.toByteArray())
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            main.post { handleDisconnect(code) }
+            main.post { if (webSocket.isCurrent()) handleDisconnect(code) }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, r: Response?) {
             main.post {
+                if (!webSocket.isCurrent()) {
+                    Log.w(TAG, "ignoring failure from a replaced socket: ${t.message}")
+                    return@post
+                }
                 Log.w(TAG, "ws failure: ${t.message}")
                 handleDisconnect(0)
             }

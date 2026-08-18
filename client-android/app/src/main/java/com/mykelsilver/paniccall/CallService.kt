@@ -1,5 +1,6 @@
 package com.mykelsilver.paniccall
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -207,38 +208,55 @@ class CallService : LifecycleService() {
      * Takes on the microphone foreground-service type so a call can open
      * AudioRecord. Idempotent and safe to call from anywhere.
      *
-     * Returns false when the system refused. That is an expected outcome,
-     * not a bug: "while-in-use" permissions such as RECORD_AUDIO may not
-     * be claimed by an app that is currently in the background, and the
-     * usual exemptions (including the battery-optimisation exemption this
-     * app asks for) explicitly do not cover that case. So the promotion
-     * is attempted at three moments, earliest first:
+     * IMPORTANT -- what the return value does and does not mean.
+     * `startForeground()` not throwing is NOT the system granting
+     * microphone access. Android decides that separately, based on
+     * whether the app was in the foreground at the moment the service
+     * entered the foreground state, and it records its verdict in its own
+     * log ("Foreground service started from background can not have
+     * location/camera/microphone access: service .../.CallService") with
+     * no API for the app to read it back. Observed on a Samsung S22 Ultra
+     * after a cold boot: startForeground succeeded, and that line appeared
+     * anyway. So this reports the two things it can genuinely observe --
+     * whether the call threw, and whether the app was in the foreground --
+     * and deliberately does not claim more than that.
      *
-     *   1. when the UI binds -- the app is visibly in the foreground then,
-     *      which is the case the platform is happiest with, and it covers
-     *      every normal launch;
-     *   2. when a call actually arrives, via the engine hook;
-     *   3. implicitly again at (1) after the user taps the full-screen
-     *      incoming-call notification, if (2) was refused.
-     *
-     * A refusal therefore costs auto-answer on a cold-booted phone that
-     * has not been opened since -- the call still rings, it just needs one
-     * tap. Quick messages and their notifications are unaffected either
-     * way: those need no microphone at all.
+     * Practical consequence: promotion attempted while the app is in the
+     * background is likely to leave the microphone restricted until the
+     * user opens the app once. Quick messages and their notifications are
+     * unaffected either way; they need no microphone.
      */
     fun ensureCallCapable(): Boolean {
         if (callCapable) return true
+        val fg = appIsInForeground()
         return try {
             callCapable = true            // read by startForegroundInCurrentMode()
             startForegroundInCurrentMode()
-            Log.w(TAG, "METRIC fgs_promote result=ok")
+            Log.w(TAG, "METRIC fgs_promote startForeground=ok appInForeground=$fg" +
+                    if (!fg) " WARNING: promoted from background, the system may " +
+                            "still refuse microphone access; check logcat for " +
+                            "\"can not have location/camera/microphone access\"" else "")
             true
         } catch (e: Exception) {
             callCapable = false
-            Log.w(TAG, "METRIC fgs_promote result=refused " +
-                    "err=${e.javaClass.simpleName}: ${e.message}")
+            Log.w(TAG, "METRIC fgs_promote startForeground=refused " +
+                    "appInForeground=$fg err=${e.javaClass.simpleName}: ${e.message}")
             false
         }
+    }
+
+    /**
+     * Whether this app currently has a visible/foreground process. Used
+     * only to qualify the promotion metric above -- it is the same input
+     * the platform uses for the while-in-use decision, so it is the best
+     * proxy available from inside the app.
+     */
+    private fun appIsInForeground(): Boolean = try {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE
+    } catch (e: Exception) {
+        false
     }
 
     /**
