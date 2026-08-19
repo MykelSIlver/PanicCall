@@ -20,7 +20,7 @@
     <application
         android:label="PanicCall"
         android:icon="@android:drawable/stat_sys_phone_call"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.PanicCall">
 
         <activity
             android:name=".MainActivity"

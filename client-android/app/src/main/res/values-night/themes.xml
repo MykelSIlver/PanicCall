@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Selected automatically when the system is in dark mode (the -night
+      resource qualifier). Same theme name, dark window background and a
+      dark platform parent so system-drawn chrome matches too.
+
+      #1C1B1F is Compose Material3's dark `background`; keeping them equal
+      is what makes the launch seamless instead of a flash.
+    -->
+    <style name="Theme.PanicCall" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+
+    <color name="window_background">#1C1B1F</color>
+</resources>

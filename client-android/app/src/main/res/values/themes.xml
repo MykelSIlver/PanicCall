@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The window background is painted by the platform BEFORE Compose gets
+      to draw anything. With a hardcoded Light platform theme, launching
+      the app in dark mode gave a white flash first. This theme exists
+      only to fix that: the -night variant of this same file supplies the
+      dark background, and Android picks between them by uiMode.
+
+      It is a plain platform theme rather than an AppCompat/Material one
+      because the app has no AppCompat dependency — all the actual
+      styling comes from Compose's MaterialTheme, not from here.
+
+      NOTE: this follows the SYSTEM setting, which is right for
+      "From system" and for Dark, and is a deliberate accepted compromise
+      when the in-app setting is Light while the system is dark: a brief
+      dark flash before a light UI. The reverse (the common case: system
+      dark, app dark) is what matters and is handled.
+    -->
+    <style name="Theme.PanicCall" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+
+    <color name="window_background">#FFFBFE</color>
+</resources>

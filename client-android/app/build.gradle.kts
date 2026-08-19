@@ -70,6 +70,10 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.2")
+    // WindowInsetsControllerCompat, for light/dark system bar icons.
+    // Arrives transitively via activity-compose anyway; declared
+    // explicitly so a future dependency bump cannot quietly remove it.
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-service:2.8.6")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

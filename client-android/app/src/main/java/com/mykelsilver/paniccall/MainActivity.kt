@@ -14,6 +14,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,7 +46,21 @@ class MainActivity : ComponentActivity() {
          *  (where the message is, and where the reply field lives) rather
          *  than just bringing the app up on the main screen. */
         const val EXTRA_SHOW_HISTORY = "com.mykelsilver.paniccall.SHOW_HISTORY"
+
+        /** Values for the "theme" preference. Stored as a string rather
+         *  than an ordinal so a reordering can never silently change what
+         *  an existing install means. */
+        const val THEME_SYSTEM = "system"
+        const val THEME_LIGHT = "light"
+        const val THEME_DARK = "dark"
     }
+
+    /**
+     * Current theme preference, hoisted onto the Activity so the settings
+     * dialog can change it and have the whole UI recompose immediately
+     * rather than only after a restart.
+     */
+    private var themeMode by mutableStateOf(THEME_SYSTEM)
 
     /**
      * Lives on the Activity rather than in a remember{} inside the
@@ -92,6 +108,19 @@ class MainActivity : ComponentActivity() {
             showHistory = true
     }
 
+    /**
+     * The resolved light/dark decision: the in-app preference, falling
+     * back to the system setting. Single source of truth -- used both for
+     * the colour scheme and for the few places that still need a
+     * theme-aware literal colour, so those can never disagree.
+     */
+    @Composable
+    private fun isDarkTheme(): Boolean = when (themeMode) {
+        THEME_LIGHT -> false
+        THEME_DARK -> true
+        else -> isSystemInDarkTheme()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
@@ -100,7 +129,35 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.POST_NOTIFICATIONS))
         CallService.start(this)
         bindService(Intent(this, CallService::class.java), conn, Context.BIND_AUTO_CREATE)
-        setContent { MaterialTheme { Screen() } }
+        themeMode = getSharedPreferences("paniccall", MODE_PRIVATE)
+            .getString("theme", THEME_SYSTEM) ?: THEME_SYSTEM
+        setContent {
+            val dark = isDarkTheme()
+            // Status- and navigation-bar icons have to be inverted to stay
+            // legible against the bar background, and nothing else does
+            // this for us: the app draws its own chrome via Compose.
+            // SideEffect, not LaunchedEffect -- it must re-run on every
+            // recomposition where `dark` changed, including the one caused
+            // by saving the setting.
+            SideEffect {
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            MaterialTheme(
+                colorScheme = if (dark) darkColorScheme() else lightColorScheme()
+            ) {
+                // Surface paints the background in the theme colour. Without
+                // it the window background from themes.xml shows through,
+                // which is only correct while the in-app setting agrees with
+                // the system setting.
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) { Screen() }
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -161,14 +218,23 @@ class MainActivity : ComponentActivity() {
                 // letting the user tap into the "peer not online" error path
                 // when the UI already knows the call would fail.
                 val canCall = state == "idle" && online
+                // The call/hangup/answer colours stay fixed across themes on
+                // purpose: red means call, green means answer. They are
+                // semantics, not decoration, and a panic button that changes
+                // colour with the system theme is a worse panic button.
+                // Only the DISABLED shade needs to follow the theme -- a dark
+                // grey that reads as "off" on white disappears entirely into
+                // a dark background.
+                val disabledButton =
+                    if (isDarkTheme()) Color(0xFF5A5A5A) else Color(0xFF404040)
                 val (label, color, action) = when {
                     state == "in_call" -> Triple("HANG UP", Color(0xFF802020)) { svc.engine.hangup() }
                     state == "ringing" -> Triple("ANSWER", Color(0xFF208020)) { svc.engine.answer() }
                     state == "idle" && canCall -> Triple("CALL ${peer.ifBlank { "…" }}",
                         Color(0xFFC02020)) { svc.engine.startCall() }
                     state == "idle" -> Triple("${peer.ifBlank { "…" }} is offline",
-                        Color(0xFF404040)) { }
-                    else -> Triple("…", Color(0xFF404040)) { }
+                        disabledButton) { }
+                    else -> Triple("…", disabledButton) { }
                 }
                 Box(
                     Modifier.size(240.dp).background(color, CircleShape)
@@ -203,7 +269,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 if (sendStatus.isNotEmpty()) {
-                    Text(sendStatus, fontSize = 12.sp, color = Color.Gray)
+                    Text(sendStatus, fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 if (state == "in_call") {
@@ -247,6 +314,9 @@ class MainActivity : ComponentActivity() {
         var quickMsg by remember {
             mutableStateOf(p.getString("quickMessage", DEFAULT_QUICK_MESSAGE) ?: DEFAULT_QUICK_MESSAGE)
         }
+        var theme by remember {
+            mutableStateOf(p.getString("theme", THEME_SYSTEM) ?: THEME_SYSTEM)
+        }
 
         AlertDialog(
             onDismissRequest = onDone,
@@ -259,7 +329,11 @@ class MainActivity : ComponentActivity() {
                         .putBoolean("defaultSpeaker", speaker)
                         .putBoolean("notifyPresence", presence)
                         .putBoolean("notifyTextReceived", textReceivedSound)
-                        .putString("quickMessage", quickMsg.trim().take(200)).apply()
+                        .putString("quickMessage", quickMsg.trim().take(200))
+                        .putString("theme", theme).apply()
+                    // Applied straight away rather than on next launch:
+                    // themeMode drives setContent's colour scheme.
+                    themeMode = theme
                     onDone()
                 }) { Text("Save") }
             },
@@ -294,6 +368,24 @@ class MainActivity : ComponentActivity() {
                     }
                     OutlinedTextField(quickMsg, { quickMsg = it },
                         label = { Text("Quick message") }, singleLine = true)
+
+                    Text("Appearance", fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        listOf(
+                            THEME_SYSTEM to "System",
+                            THEME_LIGHT to "Light",
+                            THEME_DARK to "Dark",
+                        ).forEach { (value, label) ->
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)) {
+                                RadioButton(
+                                    selected = theme == value,
+                                    onClick = { theme = value })
+                                Text(label, fontSize = 13.sp)
+                            }
+                        }
+                    }
                 }
             })
     }
@@ -343,7 +435,8 @@ class MainActivity : ComponentActivity() {
                                         )
                                         Spacer(Modifier.width(6.dp))
                                         Text(fmt.format(Date(e.timestampMs)),
-                                            fontSize = 11.sp, color = Color.Gray)
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         // Single checkmark, sent side only: none
                                         // yet = not confirmed delivered; check =
                                         // the peer's client has processed it.
