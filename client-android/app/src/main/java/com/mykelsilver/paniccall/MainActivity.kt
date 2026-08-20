@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -345,7 +347,9 @@ class MainActivity : ComponentActivity() {
                     OutlinedTextField(token, { token = it },
                         label = { Text("Token (64 hex characters)") }, singleLine = true)
                     OutlinedTextField(name, { name = it },
-                        label = { Text("Your name") }, singleLine = true)
+                        label = { Text("Your name") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(auto, { auto = it })
                         Spacer(Modifier.width(8.dp))
@@ -367,23 +371,35 @@ class MainActivity : ComponentActivity() {
                         Text("Message received sound")
                     }
                     OutlinedTextField(quickMsg, { quickMsg = it },
-                        label = { Text("Quick message") }, singleLine = true)
+                        label = { Text("Quick message") }, singleLine = true,
+                        // Sentence case, like any other message field. The
+                        // URL and token fields above deliberately keep the
+                        // default (no capitalization) -- auto-capitalizing
+                        // a wss:// URL or a hex token would corrupt them.
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences))
 
                     Text("Appearance", fontWeight = FontWeight.Bold,
                         fontSize = 13.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        // No weight(1f) per option: that hands each exactly
+                        // one third of the row, and "System" does not fit in
+                        // a third once the 48dp radio touch target is
+                        // subtracted -- it rendered as "Syste". Natural
+                        // widths with tight spacing fit all three.
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         listOf(
                             THEME_SYSTEM to "System",
                             THEME_LIGHT to "Light",
                             THEME_DARK to "Dark",
                         ).forEach { (value, label) ->
-                            Row(verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)) {
-                                RadioButton(
-                                    selected = theme == value,
-                                    onClick = { theme = value })
-                                Text(label, fontSize = 13.sp)
-                            }
+                            RadioButton(
+                                selected = theme == value,
+                                onClick = { theme = value })
+                            // The label is tappable too; hitting a 48dp
+                            // circle is not the only way to change this.
+                            Text(label, fontSize = 13.sp,
+                                modifier = Modifier.clickable { theme = value })
                         }
                     }
                 }
@@ -471,6 +487,8 @@ class MainActivity : ComponentActivity() {
                             onValueChange = { if (it.length <= 200) reply = it },
                             placeholder = { Text("Write a reply…") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences),
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(8.dp))
