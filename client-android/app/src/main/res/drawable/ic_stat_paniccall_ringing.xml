@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status-bar icon for an INCOMING CALL. Deliberately different from
+  ic_stat_paniccall so a glance at the status bar distinguishes "the app
+  is running" from "someone is calling you right now" — for this app that
+  is the distinction that matters most.
+
+  Same silhouette rule as the other one: alpha only, the system colours
+  it. So the difference has to be in the SHAPE, not the colour: a dot
+  with radiating arcs, like a button being pressed. Readable at 24dp,
+  which rules out anything more detailed.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+
+    <!-- Centre dot, smaller than the standby one to leave room. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,12m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+
+    <!-- Radiating arcs, left and right, as strokes. -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M5.5,7.5a8,8 0 0,0 0,9" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M18.5,7.5a8,8 0 0,1 0,9" />
+</vector>

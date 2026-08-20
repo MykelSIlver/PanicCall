@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Foreground layer: the panic button itself, in the same red as the button
+  in the app (#C02020) so the icon and the UI are recognisably the same
+  thing.
+
+  Sizing: the canvas is 108x108dp but only the centre 72x72dp is
+  guaranteed visible — the launcher's mask eats the rest, and different
+  launchers eat different amounts. The circle has radius 26 around the
+  centre (54,54), so it spans 52dp and stays comfortably inside that safe
+  zone on any mask.
+
+  The lighter ring is a highlight, not decoration for its own sake: a flat
+  disc reads as a dot, a ringed one reads as a button you press.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer ring: slightly darker, gives the button an edge. -->
+    <path
+        android:fillColor="#8C1717"
+        android:pathData="M54,54m-30,0a30,30 0 1,0 60,0a30,30 0 1,0 -60,0" />
+
+    <!-- The button face. -->
+    <path
+        android:fillColor="#C02020"
+        android:pathData="M54,54m-26,0a26,26 0 1,0 52,0a26,26 0 1,0 -52,0" />
+
+    <!-- Top highlight, a flattened arc, so it reads as a physical button. -->
+    <path
+        android:fillColor="#D94A4A"
+        android:pathData="M54,34a20,20 0 0,1 18,11a34,34 0 0,0 -36,0a20,20 0 0,1 18,-11z" />
+</vector>

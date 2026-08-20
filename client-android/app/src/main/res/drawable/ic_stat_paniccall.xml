@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status-bar icon for the standby notification and for quick messages.
+  "The app is there."
+
+  IMPORTANT: Android throws away the colours of a notification icon and
+  uses only the alpha channel, drawing the result as a silhouette in
+  whatever colour the system picks (white in the status bar). So this is
+  deliberately a flat white shape — setting it to #C02020 here would
+  change nothing. Notification.setColor() is what tints it red, and only
+  in the expanded shade, not in the status bar.
+
+  24x24dp is the standard notification icon size, and the shape is kept
+  inside a 22dp box because the system adds its own padding.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,12m-8,0a8,8 0 1,0 16,0a8,8 0 1,0 -16,0" />
+</vector>

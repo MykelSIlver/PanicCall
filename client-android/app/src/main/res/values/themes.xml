@@ -22,4 +22,10 @@
     </style>
 
     <color name="window_background">#FFFBFE</color>
+
+    <!-- Accent used by Notification.setColor(): tints the small icon
+         in the expanded shade. Same red as the panic button. It does
+         NOT affect the status bar, which always renders the icon in
+         the system colour. -->
+    <color name="panic_red">#C02020</color>
 </resources>

@@ -453,7 +453,12 @@ class CallService : LifecycleService() {
 
     private fun ongoingNotification(text: String): Notification =
         Notification.Builder(this, CH_ONGOING)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            // A plain dot: "the app is there". Android uses only the
+            // icon's alpha and renders it white in the status bar, so the
+            // red has to come from setColor() -- which tints it in the
+            // expanded shade only, never in the bar itself.
+            .setSmallIcon(R.drawable.ic_stat_paniccall)
+            .setColor(getColor(R.color.panic_red))
             .setContentTitle(text)
             .setContentIntent(contentIntent())
             .setOngoing(true)
@@ -467,7 +472,12 @@ class CallService : LifecycleService() {
 
     private fun postIncomingCallUi() {
         val n = Notification.Builder(this, CH_CALL)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            // Different shape from the standby icon on purpose: a glance
+            // at the status bar should separate "the app is running" from
+            // "someone is calling you". Colour cannot carry that, so the
+            // silhouette does.
+            .setSmallIcon(R.drawable.ic_stat_paniccall_ringing)
+            .setColor(getColor(R.color.panic_red))
             .setContentTitle("PanicCall from ${engine.peerName.value}")
             .setCategory(Notification.CATEGORY_CALL)
             .setFullScreenIntent(contentIntent(), true)
@@ -478,7 +488,10 @@ class CallService : LifecycleService() {
 
     private fun postTextNotification(from: String, message: String) {
         val n = Notification.Builder(this, CH_TEXT)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            // Same dot as standby: a message is not an emergency, and
+            // should not look like one in the status bar.
+            .setSmallIcon(R.drawable.ic_stat_paniccall)
+            .setColor(getColor(R.color.panic_red))
             .setContentTitle(from)
             .setContentText(message)
             .setContentIntent(textContentIntent())
