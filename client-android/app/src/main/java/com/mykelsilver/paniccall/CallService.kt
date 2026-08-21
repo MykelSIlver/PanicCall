@@ -35,6 +35,16 @@ class CallService : LifecycleService() {
     companion object {
         private const val TAG = "PanicCall"
         private const val CH_ONGOING = "paniccall_service"
+
+        /** Steady-state text: deliberately boring and, above all, stable.
+         *  The service is running; the connection state underneath it is
+         *  not something the user needs narrated. */
+        private const val TEXT_READY = "PanicCall is ready"
+        private const val TEXT_OFFLINE = "Not connected to the relay"
+        /** How long the connection may be down before it is worth saying
+         *  so. Long enough to cover a network handover, short enough that
+         *  a real outage is still noticed. */
+        private const val OFFLINE_GRACE_MS = 20_000L
         private const val CH_CALL = "paniccall_incoming"
         private const val CH_TEXT = "paniccall_text"
         private const val NOTIF_ONGOING = 1
@@ -68,7 +78,10 @@ class CallService : LifecycleService() {
 
     // Kept so ensureCallCapable() can re-post the same ongoing notification
     // it would otherwise have to invent; startForeground() needs one.
-    private var ongoingText = "PanicCall standby"
+    // Seeded with the same steady-state string the "idle" branch uses, so
+    // the first state update after startup is a no-op instead of an
+    // immediate rewrite of a notification the user has only just seen.
+    private var ongoingText = TEXT_READY
 
     // Speakerphone control. Android routes VOICE_COMMUNICATION streams to
     // the earpiece by default (like a regular phone call, for privacy) —
@@ -136,9 +149,35 @@ class CallService : LifecycleService() {
 
         applySettings()
 
+        // Ongoing-notification text lives in its own collector, so the
+        // debounce below can never delay the audio handling in the next one.
         lifecycleScope.launch {
             engine.state.collectLatest { s ->
-                notifyOngoing("PanicCall: $s")
+                when (s) {
+                    "in_call" -> notifyOngoing(
+                        "In call with ${engine.peerName.value.ifBlank { "your contact" }}")
+                    "ringing" -> notifyOngoing("Incoming call")
+                    "idle" -> notifyOngoing(TEXT_READY)
+                    else -> {
+                        // "connecting" / "disconnected": say nothing yet.
+                        // Switching 5G -> wifi flaps through both within a
+                        // second or two, and the notification rewriting
+                        // itself three times in a row is exactly what users
+                        // report as a popup. collectLatest cancels this
+                        // delay the moment the next state arrives, so a
+                        // brief flap never touches the notification at all.
+                        //
+                        // A SUSTAINED outage does still get reported: for a
+                        // panic app, silently sitting disconnected is worse
+                        // than a notification nobody asked for.
+                        delay(OFFLINE_GRACE_MS)
+                        notifyOngoing(TEXT_OFFLINE)
+                    }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            engine.state.collectLatest { s ->
                 if (s == "in_call" || s == "ringing") postIncomingCallUi()
                 if (s == "in_call") enterCallAudioMode()
                 if (s == "idle" || s == "disconnected") exitCallAudioMode()
@@ -462,9 +501,16 @@ class CallService : LifecycleService() {
             .setContentTitle(text)
             .setContentIntent(contentIntent())
             .setOngoing(true)
+            // Belt and braces alongside IMPORTANCE_LOW: an update to this
+            // notification must never make a sound, vibrate, or peek.
+            .setOnlyAlertOnce(true)
             .build()
 
     private fun notifyOngoing(text: String) {
+        // Re-posting an unchanged notification still makes it re-sort to the
+        // top of the shade and, on some OEM skins, flash in the status bar.
+        // Nothing changed, so post nothing.
+        if (text == ongoingText) return
         ongoingText = text
         getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ONGOING, ongoingNotification(text))
